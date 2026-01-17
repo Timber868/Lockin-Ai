@@ -1,0 +1,14 @@
+# Core dependencies
+numpy>=1.24.0
+
+# Computer Vision (optional, install with: pip install -r requirements.txt -r requirements-cv.txt)
+# opencv-python>=4.8.0
+# mediapipe>=0.10.0
+
+# Machine Learning (optional, install with: pip install -r requirements.txt -r requirements-ml.txt)
+# torch>=2.0.0
+# torchvision>=0.15.0
+# onnxruntime>=1.15.0
+
+# UI (optional, install with: pip install -r requirements.txt -r requirements-ui.txt)
+# pygame>=2.5.0

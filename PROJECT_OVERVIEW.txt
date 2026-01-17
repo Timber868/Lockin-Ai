@@ -1,0 +1,227 @@
+═══════════════════════════════════════════════════════════════════════════
+                    FocusAI - Project Skeleton Overview
+═══════════════════════════════════════════════════════════════════════════
+
+PROJECT TREE:
+-------------
+
+Lockin-Ai/
+├── LICENSE
+├── README.md                        # Comprehensive project documentation
+├── IMPLEMENTATION_SUMMARY.md        # Statistics & next steps
+├── main.py                          # Main entry point with CLI
+├── pyproject.toml                   # Project metadata & dependencies
+├── requirements.txt                 # Core dependencies
+├── requirements-dev.txt             # Dev dependencies
+│
+├── focusai/                         # Main package
+│   ├── __init__.py                  # Package version info
+│   ├── models.py                    # Shared dataclasses
+│   ├── config.py                    # Configuration system
+│   ├── logging_setup.py             # Logging infrastructure
+│   │
+│   ├── capture/                     # Camera frame capture
+│   │   ├── __init__.py
+│   │   └── camera.py                # CameraCapture class
+│   │
+│   ├── preprocess/                  # Frame preprocessing
+│   │   ├── __init__.py
+│   │   ├── processor.py             # FramePreprocessor class
+│   │   └── features.py              # FeatureExtractor class
+│   │
+│   ├── inference/                   # Focus detection
+│   │   ├── __init__.py
+│   │   └── detector.py              # FocusDetector class
+│   │
+│   └── ui/                          # User interface
+│       ├── __init__.py
+│       └── monitor.py               # FocusMonitorUI class
+│
+├── tests/                           # Test suite
+│   ├── __init__.py
+│   ├── test_capture.py              # Capture tests
+│   ├── test_preprocess.py           # Preprocess tests
+│   ├── test_inference.py            # Inference tests
+│   ├── test_ui.py                   # UI tests
+│   ├── test_config.py               # Config tests
+│   └── test_models.py               # Model tests
+│
+└── docs/                            # Documentation
+    ├── architecture.md              # System architecture details
+    └── PROJECT_STRUCTURE.md         # Complete API reference
+
+
+BRIEF NOTES:
+------------
+
+1. MODULES:
+   - capture: Camera frame capture with streaming support
+   - preprocess: Frame preprocessing (resize, normalize, face extraction)
+   - features: Feature extraction (landmarks, gaze, head pose)
+   - inference: Focus state detection with confidence scores
+   - ui: Live monitoring with alerts and history
+
+2. SHARED COMPONENTS:
+   - models.py: Data structures (Frame, ProcessedFrame, FocusResult, UIState)
+   - config.py: Hierarchical configuration (CaptureConfig, PreprocessConfig, etc.)
+   - logging_setup.py: Structured logging for all components
+
+3. DATA FLOW:
+   Camera → Frame → ProcessedFrame → FocusResult → UIState → Display
+
+4. KEY PATTERNS:
+   - Factory functions (create_capture, create_preprocessor, etc.)
+   - Context managers (CameraCapture, FocusMonitorUI)
+   - Dataclasses for type-safe data structures
+   - Enum for focus states (FOCUSED, UNFOCUSED, UNCERTAIN)
+
+5. STATUS:
+   ✅ Complete skeleton with all interfaces defined
+   ❌ No CV/ML implementation yet (marked with TODO comments)
+
+
+FUNCTION SIGNATURES (Key Examples):
+-----------------------------------
+
+## Capture Module
+
+class CameraCapture:
+    def __init__(self, config: CaptureConfig)
+    def start(self) -> None
+    def stop(self) -> None
+    def capture_frame(self) -> Optional[Frame]
+    def stream_frames(self) -> Generator[Frame, None, None]
+
+## Preprocess Module
+
+class FramePreprocessor:
+    def __init__(self, config: PreprocessConfig)
+    def resize_frame(self, frame_data: np.ndarray) -> np.ndarray
+    def normalize_frame(self, frame_data: np.ndarray) -> np.ndarray
+    def extract_face_region(self, frame_data: np.ndarray) -> Optional[np.ndarray]
+    def preprocess(self, frame: Frame) -> ProcessedFrame
+
+class FeatureExtractor:
+    def __init__(self, config: PreprocessConfig)
+    def extract_facial_landmarks(self, frame_data: np.ndarray) -> np.ndarray
+    def extract_gaze_features(self, frame_data: np.ndarray) -> np.ndarray
+    def extract_head_pose(self, frame_data: np.ndarray) -> np.ndarray
+    def extract(self, processed_frame: ProcessedFrame) -> ProcessedFrame
+
+## Inference Module
+
+class FocusDetector:
+    def __init__(self, config: InferenceConfig)
+    def load_model(self, model_path: Optional[str] = None) -> None
+    def preprocess_for_inference(self, processed_frame: ProcessedFrame)
+    def run_inference(self, model_input) -> tuple[FocusState, float, dict]
+    def postprocess_result(...) -> FocusResult
+    def detect(self, processed_frame: ProcessedFrame) -> FocusResult
+    def batch_detect(self, frames: list[ProcessedFrame]) -> list[FocusResult]
+
+## UI Module
+
+class FocusMonitorUI:
+    def __init__(self, config: UIConfig)
+    def initialize_window(self) -> None
+    def close_window(self) -> None
+    def should_alert(self, result: FocusResult) -> bool
+    def render_focus_indicator(self, state: FocusState, confidence: float) -> None
+    def render_confidence_meter(self, confidence: float) -> None
+    def render_history_graph(self) -> None
+    def render_alert(self, message: str) -> None
+    def update(self, result: FocusResult) -> None
+    def start(self) -> None
+    def stop(self) -> None
+
+## Main Entry Point
+
+class FocusAISystem:
+    def __init__(self, config: Config)
+    def initialize_components(self) -> None
+    def process_frame(self, frame) -> None
+    def run(self) -> None
+    def shutdown(self) -> None
+
+def main() -> int:
+    """Main entry point with CLI argument parsing"""
+
+## Configuration
+
+def load_config(config_path: Optional[str] = None) -> Config
+def save_config(config: Config, config_path: str) -> None
+
+## Logging
+
+def setup_logging(level: str = "INFO", log_file: Optional[str] = None, 
+                  log_format: Optional[str] = None) -> logging.Logger
+def get_logger(name: str) -> logging.Logger
+
+
+DATA MODELS:
+-----------
+
+class FocusState(Enum):
+    FOCUSED = "focused"
+    UNFOCUSED = "unfocused"
+    UNCERTAIN = "uncertain"
+
+@dataclass
+class Frame:
+    timestamp: float
+    data: np.ndarray
+    frame_id: int
+
+@dataclass
+class ProcessedFrame:
+    timestamp: float
+    frame_id: int
+    features: np.ndarray
+    preprocessed_data: np.ndarray
+    metadata: dict
+
+@dataclass
+class FocusResult:
+    timestamp: float
+    frame_id: int
+    state: FocusState
+    confidence: float
+    details: dict
+
+@dataclass
+class UIState:
+    focus_result: FocusResult
+    history: list[FocusResult]
+    alert_active: bool
+    message: Optional[str]
+
+
+USAGE:
+------
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run tests
+python -m unittest discover tests/ -v
+
+# Run system (after implementation)
+python main.py --camera 0 --log-level INFO --log-file focusai.log
+
+
+STATISTICS:
+-----------
+
+Total Files:        28
+Python Files:       21
+Test Files:         6
+Documentation:      4 files
+Directories:        12
+Lines of Code:      ~2,700+
+Test Cases:         14+
+All Tests:          ✅ PASSING
+
+
+═══════════════════════════════════════════════════════════════════════════
+                        End of Project Overview
+═══════════════════════════════════════════════════════════════════════════
