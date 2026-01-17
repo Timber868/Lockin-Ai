@@ -1,4 +1,4 @@
-"""Logging configuration for FocusAI system.
+"""Logging configuration for LockIn AI system.
 
 This module sets up structured logging for all components of the system.
 """
@@ -30,7 +30,7 @@ def setup_logging(
         )
     
     # Configure root logger
-    logger = logging.getLogger("focusai")
+    logger = logging.getLogger("LockIn AI")
     logger.setLevel(getattr(logging, level.upper()))
     
     # Clear existing handlers
@@ -63,4 +63,5 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         Logger instance
     """
-    return logging.getLogger(f"focusai.{name}")
+    return logging.getLogger(f"LockIn AI.{name}")
+

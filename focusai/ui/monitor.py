@@ -169,3 +169,4 @@ def create_ui(config: UIConfig) -> FocusMonitorUI:
         Initialized FocusMonitorUI instance
     """
     return FocusMonitorUI(config)
+

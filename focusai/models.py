@@ -1,4 +1,4 @@
-"""Shared data models for the FocusAI system.
+"""Shared data models for the LockIn AI system.
 
 This module defines dataclasses used across different components of the
 focus detection pipeline.
@@ -81,3 +81,4 @@ class UIState:
     history: list[FocusResult]
     alert_active: bool
     message: Optional[str] = None
+

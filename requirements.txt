@@ -12,3 +12,4 @@ numpy>=1.24.0
 
 # UI (optional, install with: pip install -r requirements.txt -r requirements-ui.txt)
 # pygame>=2.5.0
+

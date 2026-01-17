@@ -1,4 +1,4 @@
-"""Main entry point for FocusAI focus detection system.
+"""Main entry point for LockIn AI focus detection system.
 
 This module wires together all components of the system and provides
 the main execution loop.
@@ -19,7 +19,7 @@ from focusai.ui.monitor import create_ui
 logger = get_logger("main")
 
 
-class FocusAISystem:
+class LockInAISystem:
     """Main system coordinator for focus detection pipeline.
     
     Manages the complete pipeline from camera capture through inference
@@ -27,7 +27,7 @@ class FocusAISystem:
     """
     
     def __init__(self, config: Config):
-        """Initialize the FocusAI system.
+        """Initialize the LockIn AI system.
         
         Args:
             config: System configuration
@@ -38,7 +38,7 @@ class FocusAISystem:
         self.feature_extractor = None
         self.detector = None
         self.ui = None
-        logger.info("Initializing FocusAI system")
+        logger.info("Initializing LockIn AI system")
     
     def initialize_components(self) -> None:
         """Initialize all system components."""
@@ -77,7 +77,7 @@ class FocusAISystem:
         Continuously captures frames, processes them, and updates the UI
         until interrupted.
         """
-        logger.info("Starting FocusAI main loop")
+        logger.info("Starting LockIn AI main loop")
         
         try:
             # Start components
@@ -105,7 +105,7 @@ class FocusAISystem:
     
     def shutdown(self) -> None:
         """Cleanly shutdown all system components."""
-        logger.info("Shutting down FocusAI system")
+        logger.info("Shutting down LockIn AI system")
         
         if self.capture:
             self.capture.stop()
@@ -123,7 +123,7 @@ def parse_arguments() -> argparse.Namespace:
         Parsed arguments
     """
     parser = argparse.ArgumentParser(
-        description="FocusAI - Real-time focus detection system"
+        description="LockIn AI - Real-time focus detection system"
     )
     
     parser.add_argument(
@@ -169,7 +169,7 @@ def main() -> int:
     
     # Setup logging
     setup_logging(level=args.log_level, log_file=args.log_file)
-    logger.info("FocusAI starting up")
+    logger.info("LockIn AI starting up")
     
     try:
         # Load configuration
@@ -180,13 +180,13 @@ def main() -> int:
             config.capture.camera_id = args.camera
         
         # Create and initialize system
-        system = FocusAISystem(config)
+        system = LockInAISystem(config)
         system.initialize_components()
         
         # Run main loop
         system.run()
         
-        logger.info("FocusAI shutdown successfully")
+        logger.info("LockIn AI shutdown successfully")
         return 0
     
     except Exception as e:
@@ -196,3 +196,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

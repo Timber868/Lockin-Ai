@@ -118,3 +118,4 @@ def create_preprocessor(config: PreprocessConfig) -> FramePreprocessor:
         Initialized FramePreprocessor instance
     """
     return FramePreprocessor(config)
+

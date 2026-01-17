@@ -179,3 +179,4 @@ def create_detector(config: InferenceConfig) -> FocusDetector:
     if config.model_path:
         detector.load_model()
     return detector
+

@@ -156,6 +156,19 @@ select {
   font-weight: 700;
 }
 
+.session-alert {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.9);
+  color: #0b1220;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .floating-camera {
   position: absolute;
   top: 0;
@@ -247,10 +260,38 @@ select {
   gap: 16px;
 }
 
+.camera-card {
+  grid-column: span 2;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.tab-switch {
+  display: inline-flex;
+  gap: 6px;
+  background: #0b1220;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.tab-switch button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  color: #94a3b8;
+}
+
+.tab-switch button.active {
+  background: #1e3a8a;
+  color: #e2e8f0;
 }
 
 .chip {
@@ -388,4 +429,9 @@ select {
     width: 100%;
     justify-content: flex-start;
   }
+
+  .camera-card {
+    grid-column: span 1;
+  }
 }
+
