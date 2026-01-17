@@ -117,6 +117,19 @@ python main.py --config config.yaml
 python main.py --log-file focusai.log
 ```
 
+## Web Frontend (React)
+
+This repo now includes a React-based web dashboard under `frontend/`. It is a
+standalone UI prototype that can be wired to the Python service later.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open `http://localhost:5173`.
+
 ### Configuration
 
 Configuration can be provided via:
