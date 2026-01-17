@@ -23,12 +23,20 @@ export default function App() {
   const [confidence, setConfidence] = useState(0.82);
   const [currentState, setCurrentState] = useState("focused");
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [focusResults, setFocusResults] = useState([]);
+  const [focusLevel, setFocusLevel] = useState(1);
+  const [sessionSummary, setSessionSummary] = useState(null);
+  const [sessionTimeline, setSessionTimeline] = useState([]);
   const [rightPanelView, setRightPanelView] = useState("timeline");
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const sessionRef = useRef(null);
+  const sessionStartRef = useRef(null);
+  const distractedStartRef = useRef(null);
+  const distractedTotalRef = useRef(0);
+  const distractedCountRef = useRef(0);
   const [cameraPosition, setCameraPosition] = useState({ x: 24, y: 24 });
   const dragState = useRef(null);
 
@@ -62,10 +70,42 @@ export default function App() {
       return;
     }
     setRemainingSeconds(Math.round(minutes * 60));
+    setSessionSummary(null);
+    setSessionTimeline([]);
+    setFocusResults([]);
+    setFocusLevel(1);
+    sessionStartRef.current = Date.now();
+    distractedStartRef.current = null;
+    distractedTotalRef.current = 0;
+    distractedCountRef.current = 0;
     setLessonStarted(true);
   };
 
   const endLesson = () => {
+    const endTime = Date.now();
+    const sessionStart = sessionStartRef.current;
+    if (sessionStart) {
+      if (distractedStartRef.current) {
+        distractedTotalRef.current += Math.round(
+          (endTime - distractedStartRef.current) / 1000
+        );
+        distractedStartRef.current = null;
+      }
+
+      const totalSeconds = Math.max(
+        1,
+        Math.round((endTime - sessionStart) / 1000)
+      );
+      const distractedSeconds = distractedTotalRef.current;
+      const focusedSeconds = Math.max(totalSeconds - distractedSeconds, 0);
+
+      setSessionSummary({
+        totalSeconds,
+        distractedSeconds,
+        focusedSeconds,
+        alerts: distractedCountRef.current
+      });
+    }
     setLessonStarted(false);
   };
 
@@ -137,6 +177,124 @@ export default function App() {
     };
   }, [trackingEnabled]);
 
+  const evaluateFocus = (visionData) => {
+    const {
+      h_ratio: hRatio,
+      v_ratio: vRatio,
+      left_ear: leftEar,
+      state,
+      objects
+    } = visionData || {};
+
+    const normalizedState = String(state || "").toLowerCase();
+    const normalizedObjects = (objects || []).map((item) =>
+      String(item).toLowerCase()
+    );
+
+    const distractedObjects = ["phone", "cell phone", "tablet", "ipad"];
+    const hasDistractor = normalizedObjects.some((item) =>
+      distractedObjects.includes(item)
+    );
+
+    if (hasDistractor) {
+      return { focused: false, reason: "distractor" };
+    }
+
+    if (typeof leftEar === "number" && leftEar < 0.3) {
+      return { focused: false, reason: "eyes-closed" };
+    }
+
+    if (normalizedState === "at screen") {
+      return { focused: true, reason: "state" };
+    }
+
+    if (
+      typeof hRatio === "number" &&
+      typeof vRatio === "number" &&
+      hRatio >= 0.35 &&
+      hRatio <= 0.65 &&
+      vRatio >= 0.35 &&
+      vRatio <= 0.6
+    ) {
+      return { focused: true, reason: "centered" };
+    }
+
+    return { focused: false, reason: "off-center" };
+  };
+
+  const pushFocusResult = (isFocused) => {
+    setFocusResults((prevResults) => {
+      const nextResults = [...prevResults, isFocused ? 1 : 0].slice(-20);
+      const average =
+        nextResults.reduce((sum, value) => sum + value, 0) /
+        nextResults.length;
+      setFocusLevel(average);
+      setCurrentState(average >= 0.7 ? "focused" : "distracted");
+      return nextResults;
+    });
+  };
+
+  useEffect(() => {
+    if (!lessonStarted) {
+      setFocusResults([]);
+      setFocusLevel(1);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const focusBias = Math.random();
+      const hRatio = focusBias < 0.7 ? 0.45 : 0.2 + Math.random() * 0.6;
+      const vRatio = focusBias < 0.7 ? 0.5 : 0.2 + Math.random() * 0.6;
+      const leftEar = Math.random() > 0.95 ? 0.2 : 0.35;
+      const state =
+        focusBias < 0.7 ? "at screen" : ["left", "right", "down"][
+          Math.floor(Math.random() * 3)
+        ];
+      const objects = Math.random() > 0.97 ? ["phone"] : [];
+
+      const result = evaluateFocus({
+        h_ratio: hRatio,
+        v_ratio: vRatio,
+        left_ear: leftEar,
+        state,
+        objects
+      });
+      pushFocusResult(result.focused);
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [lessonStarted]);
+
+  const focusWarningActive = focusLevel < 0.7;
+
+  useEffect(() => {
+    if (!lessonStarted || !sessionStartRef.current) {
+      return;
+    }
+    const now = Date.now();
+    const elapsedSeconds = Math.round(
+      (now - sessionStartRef.current) / 1000
+    );
+    if (focusWarningActive && !distractedStartRef.current) {
+      distractedStartRef.current = now;
+      distractedCountRef.current += 1;
+      setSessionTimeline((prev) => [
+        ...prev,
+        { elapsedSeconds, state: "distracted" }
+      ]);
+    }
+    if (!focusWarningActive && distractedStartRef.current) {
+      distractedTotalRef.current += Math.round(
+        (now - distractedStartRef.current) / 1000
+      );
+      distractedStartRef.current = null;
+      setSessionTimeline((prev) => [
+        ...prev,
+        { elapsedSeconds, state: "focused" }
+      ]);
+    }
+  }, [focusWarningActive, lessonStarted]);
+
   useEffect(() => {
     if (!streamRef.current || !videoRef.current) {
       return;
@@ -175,6 +333,12 @@ export default function App() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   }, [remainingSeconds]);
 
+  const formatDuration = (totalSeconds) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m ${seconds}s`;
+  };
+
   return (
     <div className="page">
       <header className="header">
@@ -207,6 +371,9 @@ export default function App() {
               placeholder background.
             </p>
           </div>
+          {focusWarningActive && (
+            <div className="session-alert">YOU'RE NOT FOCUSED</div>
+          )}
           <div
             className="floating-camera"
             onMouseDown={(event) => {
@@ -261,7 +428,7 @@ export default function App() {
               <div>
                 <p className="footer-label">{statusText}</p>
                 <p className="footer-subtle">
-                  Confidence {Math.round(confidence * 100)}%
+                  Focus level {Math.round(focusLevel * 100)}%
                 </p>
               </div>
             </div>
@@ -381,34 +548,52 @@ export default function App() {
             </div>
             {rightPanelView === "timeline" ? (
               <>
-                <p className="subtle note">Last 25 minutes</p>
-                <div className="timeline">
-                  {sampleTimeline.map((entry) => (
-                    <div className="timeline-item" key={entry.label}>
-                      <span className="timeline-time">{entry.label}</span>
-                      <span
-                        className="timeline-pill"
-                        style={{ backgroundColor: statusColors[entry.state] }}
-                      >
-                        {entry.state}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <p className="subtle note">
+                  {sessionTimeline.length
+                    ? "Session focus shifts"
+                    : "No session data yet"}
+                </p>
+                {sessionTimeline.length ? (
+                  <div className="timeline">
+                    {sessionTimeline.slice(-8).map((entry, index) => (
+                      <div className="timeline-item" key={`${entry.state}-${index}`}>
+                        <span className="timeline-time">
+                          {formatDuration(entry.elapsedSeconds)}
+                        </span>
+                        <span
+                          className="timeline-pill"
+                          style={{ backgroundColor: statusColors[entry.state] }}
+                        >
+                          {entry.state}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </>
             ) : (
               <>
                 <div className="insights">
                   <div>
-                    <p className="insight-value">42m</p>
+                    <p className="insight-value">
+                      {sessionSummary
+                        ? formatDuration(sessionSummary.focusedSeconds)
+                        : "0m 0s"}
+                    </p>
                     <p className="subtle">Focused time</p>
                   </div>
                   <div>
-                    <p className="insight-value">6m</p>
+                    <p className="insight-value">
+                      {sessionSummary
+                        ? formatDuration(sessionSummary.distractedSeconds)
+                        : "0m 0s"}
+                    </p>
                     <p className="subtle">Distractions</p>
                   </div>
                   <div>
-                    <p className="insight-value">12</p>
+                    <p className="insight-value">
+                      {sessionSummary ? sessionSummary.alerts : 0}
+                    </p>
                     <p className="subtle">Alerts</p>
                   </div>
                 </div>
