@@ -113,3 +113,4 @@ def create_feature_extractor(config: PreprocessConfig) -> FeatureExtractor:
         Initialized FeatureExtractor instance
     """
     return FeatureExtractor(config)
+

@@ -1,4 +1,4 @@
-"""Configuration management for FocusAI system.
+"""Configuration management for LockIn AI system.
 
 This module handles loading and managing configuration settings from
 files and environment variables.
@@ -68,7 +68,7 @@ class UIConfig:
         alert_threshold: Focus confidence below which to alert
         history_length: Number of historical results to maintain
     """
-    window_title: str = "FocusAI Monitor"
+    window_title: str = "LockIn AI Monitor"
     refresh_rate: int = 30
     show_confidence: bool = True
     alert_threshold: float = 0.5
@@ -122,3 +122,4 @@ def save_config(config: Config, config_path: str) -> None:
     """
     # TODO: Implement config file saving
     pass
+

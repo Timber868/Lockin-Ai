@@ -43,10 +43,11 @@ class TestConfig(unittest.TestCase):
     def test_ui_config_defaults(self):
         """Test UIConfig default values."""
         config = UIConfig()
-        self.assertEqual(config.window_title, "FocusAI Monitor")
+        self.assertEqual(config.window_title, "LockIn AI Monitor")
         self.assertEqual(config.refresh_rate, 30)
         self.assertTrue(config.show_confidence)
 
 
 if __name__ == "__main__":
     unittest.main()
+

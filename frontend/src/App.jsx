@@ -23,6 +23,7 @@ export default function App() {
   const [confidence, setConfidence] = useState(0.82);
   const [currentState, setCurrentState] = useState("focused");
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [rightPanelView, setRightPanelView] = useState("timeline");
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -62,6 +63,10 @@ export default function App() {
     }
     setRemainingSeconds(Math.round(minutes * 60));
     setLessonStarted(true);
+  };
+
+  const endLesson = () => {
+    setLessonStarted(false);
   };
 
   useEffect(() => {
@@ -174,10 +179,10 @@ export default function App() {
     <div className="page">
       <header className="header">
         <div>
-          <p className="eyebrow">FocusAI Web</p>
+          <p className="eyebrow">LockIn AI</p>
           <h1>Real-time focus monitoring</h1>
           <p className="subtle">
-            React dashboard prototype for the FocusAI pipeline. Backend wiring
+            React dashboard prototype for the LockIn AI pipeline. Backend wiring
             can be added later via WebSocket or REST.
           </p>
         </div>
@@ -216,14 +221,17 @@ export default function App() {
             }}
           >
             <div className="camera-frame">
-              <video
-                ref={videoRef}
-                className="camera-video"
-                autoPlay
-                playsInline
-                muted
-                onLoadedMetadata={() => setCameraReady(true)}
-              />
+            <video
+              ref={videoRef}
+              className="camera-video"
+              autoPlay
+              playsInline
+              muted
+              onLoadedMetadata={() => {
+                setCameraReady(true);
+                setCameraError("");
+              }}
+            />
               {(cameraError || !cameraReady) && (
                 <div className="camera-overlay">
                   <div className="camera-ring" />
@@ -257,6 +265,9 @@ export default function App() {
                 </p>
               </div>
             </div>
+            <button className="ghost" type="button" onClick={endLesson}>
+              End session
+            </button>
           </div>
         </main>
       ) : (
@@ -273,7 +284,10 @@ export default function App() {
                 autoPlay
                 playsInline
                 muted
-                onLoadedMetadata={() => setCameraReady(true)}
+                onLoadedMetadata={() => {
+                  setCameraReady(true);
+                  setCameraError("");
+                }}
               />
               {(cameraError || !cameraReady) && (
                 <div className="camera-overlay">
@@ -288,31 +302,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
-          </section>
-
-          <section className="card status-card">
-            <div className="card-header">
-              <h2>Current status</h2>
-              <span className="chip">Live</span>
-            </div>
-            <div className="status">
-              <span
-                className="status-dot"
-                style={{ backgroundColor: statusColor }}
-              />
-              <div>
-                <p className="status-label">{statusText}</p>
-                <p className="subtle">
-                  Confidence {Math.round(confidence * 100)}%
-                </p>
-              </div>
-            </div>
-            <div className="meter">
-              <div
-                className="meter-fill"
-                style={{ width: `${confidence * 100}%` }}
-              />
             </div>
           </section>
 
@@ -350,7 +339,7 @@ export default function App() {
                 <span>Accountability character</span>
                 <input
                   type="text"
-                  placeholder="e.g. Professor Oak"
+                  placeholder="e.g. Shrek"
                   value={accountabilityCharacter}
                   onChange={(event) =>
                     setAccountabilityCharacter(event.target.value)
@@ -366,51 +355,73 @@ export default function App() {
             </form>
           </section>
 
-          <section className="card timeline-card">
+          <section className="card right-panel-card">
             <div className="card-header">
-              <h2>Focus timeline</h2>
-              <span className="chip">Last 25 minutes</span>
+              <h2>
+                {rightPanelView === "timeline"
+                  ? "Focus timeline"
+                  : "Session insights"}
+              </h2>
+              <div className="tab-switch">
+                <button
+                  className={rightPanelView === "timeline" ? "active" : ""}
+                  type="button"
+                  onClick={() => setRightPanelView("timeline")}
+                >
+                  Timeline
+                </button>
+                <button
+                  className={rightPanelView === "insights" ? "active" : ""}
+                  type="button"
+                  onClick={() => setRightPanelView("insights")}
+                >
+                  Insights
+                </button>
+              </div>
             </div>
-            <div className="timeline">
-              {sampleTimeline.map((entry) => (
-                <div className="timeline-item" key={entry.label}>
-                  <span className="timeline-time">{entry.label}</span>
-                  <span
-                    className="timeline-pill"
-                    style={{ backgroundColor: statusColors[entry.state] }}
-                  >
-                    {entry.state}
-                  </span>
+            {rightPanelView === "timeline" ? (
+              <>
+                <p className="subtle note">Last 25 minutes</p>
+                <div className="timeline">
+                  {sampleTimeline.map((entry) => (
+                    <div className="timeline-item" key={entry.label}>
+                      <span className="timeline-time">{entry.label}</span>
+                      <span
+                        className="timeline-pill"
+                        style={{ backgroundColor: statusColors[entry.state] }}
+                      >
+                        {entry.state}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="card insights-card">
-            <div className="card-header">
-              <h2>Session insights</h2>
-            </div>
-            <div className="insights">
-              <div>
-                <p className="insight-value">42m</p>
-                <p className="subtle">Focused time</p>
-              </div>
-              <div>
-                <p className="insight-value">6m</p>
-                <p className="subtle">Distractions</p>
-              </div>
-              <div>
-                <p className="insight-value">12</p>
-                <p className="subtle">Alerts</p>
-              </div>
-            </div>
-            <p className="subtle note">
-              Replace these placeholders with real metrics from the inference
-              pipeline.
-            </p>
+              </>
+            ) : (
+              <>
+                <div className="insights">
+                  <div>
+                    <p className="insight-value">42m</p>
+                    <p className="subtle">Focused time</p>
+                  </div>
+                  <div>
+                    <p className="insight-value">6m</p>
+                    <p className="subtle">Distractions</p>
+                  </div>
+                  <div>
+                    <p className="insight-value">12</p>
+                    <p className="subtle">Alerts</p>
+                  </div>
+                </div>
+                <p className="subtle note">
+                  Replace these placeholders with real metrics from the
+                  inference pipeline.
+                </p>
+              </>
+            )}
           </section>
         </main>
       )}
     </div>
   );
 }
+

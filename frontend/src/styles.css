@@ -247,10 +247,38 @@ select {
   gap: 16px;
 }
 
+.camera-card {
+  grid-column: span 2;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.tab-switch {
+  display: inline-flex;
+  gap: 6px;
+  background: #0b1220;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.tab-switch button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  color: #94a3b8;
+}
+
+.tab-switch button.active {
+  background: #1e3a8a;
+  color: #e2e8f0;
 }
 
 .chip {
@@ -388,4 +416,9 @@ select {
     width: 100%;
     justify-content: flex-start;
   }
+
+  .camera-card {
+    grid-column: span 1;
+  }
 }
+

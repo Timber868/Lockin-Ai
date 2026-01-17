@@ -1,5 +1,5 @@
 ═══════════════════════════════════════════════════════════════════════════
-                    FocusAI - Project Skeleton Overview
+                    LockIn AI - Project Skeleton Overview
 ═══════════════════════════════════════════════════════════════════════════
 
 PROJECT TREE:
@@ -136,7 +136,7 @@ class FocusMonitorUI:
 
 ## Main Entry Point
 
-class FocusAISystem:
+class LockInAISystem:
     def __init__(self, config: Config)
     def initialize_components(self) -> None
     def process_frame(self, frame) -> None
@@ -206,7 +206,7 @@ pip install -r requirements.txt
 python -m unittest discover tests/ -v
 
 # Run system (after implementation)
-python main.py --camera 0 --log-level INFO --log-file focusai.log
+python main.py --camera 0 --log-level INFO --log-file lockin-ai.log
 
 
 STATISTICS:
@@ -225,3 +225,4 @@ All Tests:          ✅ PASSING
 ═══════════════════════════════════════════════════════════════════════════
                         End of Project Overview
 ═══════════════════════════════════════════════════════════════════════════
+

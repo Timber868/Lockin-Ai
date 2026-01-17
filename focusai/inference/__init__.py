@@ -1,1 +1,2 @@
 """Inference module initialization."""
+

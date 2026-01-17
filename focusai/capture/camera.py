@@ -110,3 +110,4 @@ def create_capture(config: CaptureConfig) -> CameraCapture:
         Initialized CameraCapture instance
     """
     return CameraCapture(config)
+

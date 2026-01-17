@@ -1,10 +1,10 @@
-# FocusAI System Architecture
+# LockIn AI System Architecture
 
-This document describes the architecture and design of the FocusAI focus detection system.
+This document describes the architecture and design of the LockIn AI focus detection system.
 
 ## System Overview
 
-FocusAI is a real-time focus detection system that processes video frames through a multi-stage pipeline to determine whether a user is focused on their task. The system provides immediate visual feedback to help users maintain attention.
+LockIn AI is a real-time focus detection system that processes video frames through a multi-stage pipeline to determine whether a user is focused on their task. The system provides immediate visual feedback to help users maintain attention.
 
 ## Architecture Diagram
 
@@ -206,7 +206,7 @@ Configuration can be loaded from:
 ## Logging
 
 Structured logging is provided by the `logging_setup` module:
-- Hierarchical logger names (`focusai.module.submodule`)
+- Hierarchical logger names (`LockIn AI.module.submodule`)
 - Configurable log levels (DEBUG, INFO, WARNING, ERROR)
 - Console and file output options
 - Consistent log format with timestamps and context
@@ -350,20 +350,21 @@ python main.py --log-level DEBUG
 
 ### Production
 ```bash
-python main.py --config production.yaml --log-file /var/log/focusai.log
+python main.py --config production.yaml --log-file /var/log/lockin-ai.log
 ```
 
 ### Docker (Future)
 ```bash
-docker build -t focusai .
-docker run -it --device=/dev/video0 focusai
+docker build -t lockin-ai .
+docker run -it --device=/dev/video0 lockin-ai
 ```
 
 ## Conclusion
 
-FocusAI's modular architecture provides a clean separation of concerns while maintaining a straightforward data flow. The design emphasizes:
+LockIn AI's modular architecture provides a clean separation of concerns while maintaining a straightforward data flow. The design emphasizes:
 - **Modularity**: Each component is independent and replaceable
 - **Testability**: Clear interfaces enable comprehensive testing
 - **Extensibility**: New features can be added without major refactoring
 - **Performance**: Architecture supports real-time processing requirements
 - **Maintainability**: Well-documented code with consistent patterns
+

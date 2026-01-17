@@ -1,4 +1,4 @@
-# FocusAI Project Structure and API Reference
+# LockIn AI Project Structure and API Reference
 
 ## Project Tree
 
@@ -129,7 +129,7 @@ class InferenceConfig:
 
 @dataclass
 class UIConfig:
-    window_title: str = "FocusAI Monitor"
+    window_title: str = "LockIn AI Monitor"
     refresh_rate: int = 30
     show_confidence: bool = True
     alert_threshold: float = 0.5
@@ -359,9 +359,9 @@ def create_ui(config: UIConfig) -> FocusMonitorUI:
 **Key Class**:
 
 ```python
-class FocusAISystem:
+class LockInAISystem:
     def __init__(self, config: Config):
-        """Initialize the FocusAI system."""
+        """Initialize the LockIn AI system."""
     
     def initialize_components(self) -> None:
         """Initialize all system components."""
@@ -444,13 +444,13 @@ User
 
 ```python
 from focusai.config import load_config
-from main import FocusAISystem
+from main import LockInAISystem
 
 # Load configuration
 config = load_config()
 
 # Create and run system
-system = FocusAISystem(config)
+system = LockInAISystem(config)
 system.initialize_components()
 system.run()
 ```
@@ -468,7 +468,7 @@ config = Config(
 )
 
 # Use custom config
-system = FocusAISystem(config)
+system = LockInAISystem(config)
 ```
 
 ### Processing Single Frame
@@ -558,3 +558,4 @@ Follow Python best practices:
    - Add comprehensive tests
    - Profile and optimize
    - Ensure real-time performance
+

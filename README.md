@@ -1,10 +1,10 @@
-# FocusAI - Real-Time Focus Detection System
+# LockIn AI - Real-Time Focus Detection System
 
 A Python-based real-time focus detection system that monitors user attention through camera input and provides live visual feedback. Built for McHacks 2026.
 
 ## Overview
 
-FocusAI uses computer vision and machine learning to detect whether a user is focused on their task. The system captures video frames from a camera, processes them to extract relevant features, runs inference to determine focus state, and displays real-time feedback through a user interface.
+LockIn AI uses computer vision and machine learning to detect whether a user is focused on their task. The system captures video frames from a camera, processes them to extract relevant features, runs inference to determine focus state, and displays real-time feedback through a user interface.
 
 ## Project Structure
 
@@ -114,7 +114,7 @@ python main.py --log-level DEBUG
 python main.py --config config.yaml
 
 # Save logs to file
-python main.py --log-file focusai.log
+python main.py --log-file lockin-ai.log
 ```
 
 ## Web Frontend (React)
@@ -243,3 +243,4 @@ Built for McHacks 2026 by the Lockin-AI team.
 - OpenCV for computer vision capabilities
 - MediaPipe for face and pose detection
 - PyTorch for machine learning framework 
+
