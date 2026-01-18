@@ -82,6 +82,14 @@ export default function App() {
 
   const sendVisionConfig = (config) => {
     const socket = socketRef.current;
+    if (!socket) {
+      console.warn("[LockIn AI] Cannot send config: No socket connection.");
+      return;
+    }
+    if (socket.readyState !== WebSocket.OPEN) {
+      console.warn("[LockIn AI] Cannot send config: Socket not OPEN. State:", socket.readyState);
+      return;
+    }
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -458,6 +466,18 @@ export default function App() {
       console.log("[LockIn AI] Vision socket connected");
       setVisionStatus("connected");
       setCameraReady(false);
+      const payload = {
+        type: "config",
+        h_min: visionConfig.hMin,
+        h_max: visionConfig.hMax,
+        v_min: visionConfig.vMin,
+        v_max: visionConfig.vMax,
+        ear_threshold: visionConfig.earThreshold,
+        audio_threshold: visionConfig.audioThreshold,
+        include_talking: visionConfig.includeTalking,
+        include_objects: visionConfig.includeObjects
+      };
+      socket.send(JSON.stringify(payload));
       sendVisionConfig(visionConfig);
     };
 
@@ -519,11 +539,16 @@ export default function App() {
       setVisionState("");
       setCameraReady(false);
       setCameraError("Vision backend disconnected.");
-      socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
 
     return () => {
       socket.close();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
   }, [trackingEnabled]);
 
