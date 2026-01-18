@@ -24,6 +24,7 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [focusResults, setFocusResults] = useState([]);
   const [focusLevel, setFocusLevel] = useState(1);
+  const focusLevelRef = useRef(1);
   const [sessionSummary, setSessionSummary] = useState(null);
   const [sessionTimeline, setSessionTimeline] = useState([]);
   const [rightPanelView, setRightPanelView] = useState("timeline");
@@ -40,6 +41,7 @@ export default function App() {
   const alertVideoRef = useRef(null);
   const alertTimeoutRef = useRef(null);
   const alertQueuedRef = useRef(false);
+  const reminderTimeoutRef = useRef(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -51,6 +53,7 @@ export default function App() {
   const distractedCountRef = useRef(0);
   const [cameraPosition, setCameraPosition] = useState({ x: 24, y: 24 });
   const dragState = useRef(null);
+  const endTriggeredRef = useRef(false);
   const [visionConfig, setVisionConfig] = useState({
     hMin: 0.35,
     hMax: 0.65,
@@ -63,7 +66,8 @@ export default function App() {
   });
   const [characterChoice, setCharacterChoice] = useState("cop");
   const [alertQueue, setAlertQueue] = useState([]);
-  const [activeAlert, setActiveAlert] = useState("");
+  const [activeAlert, setActiveAlert] = useState(null);
+  const [endSessionPending, setEndSessionPending] = useState(false);
 
   const statusText = useMemo(() => {
     if (!trackingEnabled) {
@@ -99,6 +103,14 @@ export default function App() {
 
   const normalizeState = (value) =>
     String(value || "").trim().toLowerCase();
+  const swapLeftRightLabel = (value) => {
+    const text = String(value || "");
+    const swapped = text
+      .replace(/left/gi, "__swap_left__")
+      .replace(/right/gi, "left")
+      .replace(/__swap_left__/gi, "right");
+    return swapped;
+  };
   const isFocusedState = (value) =>
     value === "focused" || value === "at screen";
   const computeMostCommonDistractor = (states, includeTalking) => {
@@ -141,6 +153,10 @@ export default function App() {
   const effectiveIncludeTalking =
     backendConfig?.include_talking ?? visionConfig.includeTalking;
 
+  useEffect(() => {
+    focusLevelRef.current = focusLevel;
+  }, [focusLevel]);
+
   const characterAssets = {
     cop: {
       label: "Cop",
@@ -148,7 +164,10 @@ export default function App() {
       side: "/videos/cop/Cop-side.mp4",
       up: "/videos/cop/Cop-up.mp4",
       phone: "/videos/cop/Cop-phone.mp4",
-      talking: "/videos/cop/Cop-talking.mp4"
+      talking: "/videos/cop/Cop-talking.mp4",
+      gone: "/videos/cop/Cop-gone.mp4",
+      reminder: "/videos/cop/Cop-reminder.mp4",
+      praise: null
     },
     animegirl: {
       label: "Anime Girl",
@@ -156,7 +175,32 @@ export default function App() {
       side: "/videos/animegirl/animegirl-side.mp4",
       up: "/videos/animegirl/animegirl-up.mp4",
       phone: "/videos/animegirl/animegirl-phone.mp4",
-      talking: "/videos/animegirl/animegirl-talking.mp4"
+      talking: "/videos/animegirl/animegirl-talking.mp4",
+      gone: "/videos/animegirl/animegirl-lost.mp4",
+      reminder: "/videos/animegirl/animegirl-reminder.mp4",
+      praise: "/videos/animegirl/animegirl-praise.mp4"
+    },
+    drillsergeant: {
+      label: "Drill Sergeant",
+      filler: "/videos/drillsergeant/drillsergeant-filler.mp4",
+      side: "/videos/drillsergeant/drillsergeant-side.mp4",
+      up: "/videos/drillsergeant/drillsergeant-up.mp4",
+      phone: "/videos/drillsergeant/drillsergeant-phone.mp4",
+      talking: "/videos/drillsergeant/drillsergeant-talking.mp4",
+      gone: "/videos/drillsergeant/drillsergeant-lost.mp4",
+      reminder: "/videos/drillsergeant/drillsergeant-reminder.mp4",
+      praise: "/videos/drillsergeant/drillsergeant-praise.mp4"
+    },
+    shrek: {
+      label: "Shrek",
+      filler: "/videos/shrek/shrek-filler.mp4",
+      side: "/videos/shrek/shrek-side.mp4",
+      up: "/videos/shrek/shrek-up.mp4",
+      phone: "/videos/shrek/shrek-phone.mp4",
+      talking: "/videos/shrek/shrek-talking.mp4",
+      gone: "/videos/shrek/shrek-gone.mp4",
+      reminder: "/videos/shrek/shrek-reminder.mp4",
+      praise: "/videos/shrek/shrek-praise.mp4"
     }
   };
 
@@ -172,6 +216,9 @@ export default function App() {
     if (normalized.includes("up")) {
       return "up";
     }
+    if (normalized.includes("eyes closed")) {
+      return "up";
+    }
     if (
       normalized.includes("phone") ||
       normalized.includes("book") ||
@@ -179,11 +226,11 @@ export default function App() {
     ) {
       return "phone";
     }
-    if (normalized.includes("eyes closed")) {
-      return "up";
-    }
     if (normalized.includes("talking")) {
       return effectiveIncludeTalking ? "talking" : "";
+    }
+    if (normalized.includes("no face")) {
+      return "gone";
     }
     return "";
   };
@@ -207,6 +254,7 @@ export default function App() {
     setSessionTimeline([]);
     setFocusResults([]);
     setFocusLevel(1);
+    endTriggeredRef.current = false;
     sessionStartRef.current = Date.now();
     distractedStartRef.current = null;
     distractedTotalRef.current = 0;
@@ -238,6 +286,12 @@ export default function App() {
         focusedSeconds,
         alerts: distractedCountRef.current
       });
+    }
+    const praiseClip = characterAssets[characterChoice]?.praise;
+    if (praiseClip) {
+      setEndSessionPending(true);
+    setActiveAlert({ src: praiseClip, kind: "praise" });
+      return;
     }
     setLessonStarted(false);
   };
@@ -415,7 +469,7 @@ export default function App() {
         if (!effectiveIncludeTalking && incomingState.toLowerCase().includes("talking")) {
           setVisionState("Focused");
         } else {
-          setVisionState(incomingState);
+          setVisionState(swapLeftRightLabel(incomingState));
         }
         if (payload?.config) {
           setBackendConfig(payload.config);
@@ -433,7 +487,9 @@ export default function App() {
           );
           recentStatesRef.current = nextStates;
           setDistractorReason(
-            computeMostCommonDistractor(nextStates, effectiveIncludeTalking)
+            swapLeftRightLabel(
+              computeMostCommonDistractor(nextStates, effectiveIncludeTalking)
+            )
           );
         }
         if (payload?.state === "camera-error") {
@@ -493,6 +549,10 @@ export default function App() {
         clearTimeout(alertTimeoutRef.current);
         alertTimeoutRef.current = null;
       }
+      if (reminderTimeoutRef.current) {
+        clearTimeout(reminderTimeoutRef.current);
+        reminderTimeoutRef.current = null;
+      }
       alertQueuedRef.current = false;
       return;
     }
@@ -516,7 +576,7 @@ export default function App() {
         return;
       }
       alertQueuedRef.current = true;
-      setAlertQueue((prev) => [...prev, asset]);
+      setAlertQueue((prev) => [...prev, { src: asset, kind: "alert" }]);
     }, remaining);
 
     return () => {
@@ -550,6 +610,22 @@ export default function App() {
     alertVideoRef.current.currentTime = 0;
     alertVideoRef.current.play().catch(() => {});
   }, [activeAlert]);
+  const scheduleReminder = () => {
+    if (reminderTimeoutRef.current) {
+      clearTimeout(reminderTimeoutRef.current);
+      reminderTimeoutRef.current = null;
+    }
+    const reminderAsset = characterAssets[characterChoice]?.reminder;
+    if (!reminderAsset) {
+      return;
+    }
+    reminderTimeoutRef.current = setTimeout(() => {
+      if (focusLevelRef.current >= 0.7) {
+        return;
+      }
+      setAlertQueue((prev) => [...prev, { src: reminderAsset, kind: "reminder" }]);
+    }, 8000);
+  };
 
   useEffect(() => {
     if (!lessonStarted || !sessionStartRef.current) {
@@ -603,6 +679,10 @@ export default function App() {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
+          if (!endTriggeredRef.current) {
+            endTriggeredRef.current = true;
+            endLesson();
+          }
           return 0;
         }
         return prev - 1;
@@ -662,10 +742,29 @@ export default function App() {
               <video
                 ref={alertVideoRef}
                 className="session-video alert-video"
-                src={activeAlert}
+                src={activeAlert.src}
                 autoPlay
                 playsInline
-                onEnded={() => setActiveAlert("")}
+                onEnded={() => {
+                  const wasAlert = activeAlert.kind === "alert";
+                  const wasReminder = activeAlert.kind === "reminder";
+                  setActiveAlert(null);
+                  if (wasReminder) {
+                    setFocusResults([1]);
+                    setFocusLevel(1);
+                    setCurrentState("focused");
+                    setDistractorReason("");
+                    distractedStartRef.current = null;
+                    alertQueuedRef.current = false;
+                  }
+                  if (wasAlert && focusWarningActive) {
+                    scheduleReminder();
+                  }
+                  if (endSessionPending) {
+                    setEndSessionPending(false);
+                    setLessonStarted(false);
+                  }
+                }}
               />
             )}
           </div>
@@ -855,9 +954,9 @@ export default function App() {
                 <span>Study length (minutes)</span>
                 <input
                   type="number"
-                  min="5"
+                    min="1"
                   max="240"
-                  step="5"
+                    step="1"
                   value={lessonMinutes}
                   onChange={(event) => setLessonMinutes(event.target.value)}
                 />
