@@ -17,7 +17,6 @@ const sampleTimeline = [
 export default function App() {
   const [lessonMinutes, setLessonMinutes] = useState("45");
   const [workMode, setWorkMode] = useState("laptop");
-  const [accountabilityCharacter, setAccountabilityCharacter] = useState("");
   const [lessonStarted, setLessonStarted] = useState(false);
   const [trackingEnabled, setTrackingEnabled] = useState(true);
   const [confidence, setConfidence] = useState(0.82);
@@ -38,6 +37,9 @@ export default function App() {
   const lastPayloadRef = useRef(null);
   const recentStatesRef = useRef([]);
   const socketRef = useRef(null);
+  const alertVideoRef = useRef(null);
+  const alertTimeoutRef = useRef(null);
+  const alertQueuedRef = useRef(false);
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -59,6 +61,9 @@ export default function App() {
     includeTalking: true,
     includeObjects: true
   });
+  const [characterChoice, setCharacterChoice] = useState("cop");
+  const [alertQueue, setAlertQueue] = useState([]);
+  const [activeAlert, setActiveAlert] = useState("");
 
   const statusText = useMemo(() => {
     if (!trackingEnabled) {
@@ -135,6 +140,53 @@ export default function App() {
   const statusColor = trackingEnabled ? focusMeterColor : statusColors.offline;
   const effectiveIncludeTalking =
     backendConfig?.include_talking ?? visionConfig.includeTalking;
+
+  const characterAssets = {
+    cop: {
+      label: "Cop",
+      filler: "/videos/cop/cop-filler.mp4",
+      side: "/videos/cop/Cop-side.mp4",
+      up: "/videos/cop/Cop-up.mp4",
+      phone: "/videos/cop/Cop-phone.mp4",
+      talking: "/videos/cop/Cop-talking.mp4"
+    },
+    animegirl: {
+      label: "Anime Girl",
+      filler: "/videos/animegirl/animegirl-filler.mp4",
+      side: "/videos/animegirl/animegirl-side.mp4",
+      up: "/videos/animegirl/animegirl-up.mp4",
+      phone: "/videos/animegirl/animegirl-phone.mp4",
+      talking: "/videos/animegirl/animegirl-talking.mp4"
+    }
+  };
+
+  const normalizedStateLabel = (value) => normalizeState(value);
+  const alertKeyForState = (value) => {
+    const normalized = normalizedStateLabel(value);
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.includes("left") || normalized.includes("right")) {
+      return "side";
+    }
+    if (normalized.includes("up")) {
+      return "up";
+    }
+    if (
+      normalized.includes("phone") ||
+      normalized.includes("book") ||
+      normalized.includes("down")
+    ) {
+      return "phone";
+    }
+    if (normalized.includes("eyes closed")) {
+      return "up";
+    }
+    if (normalized.includes("talking")) {
+      return effectiveIncludeTalking ? "talking" : "";
+    }
+    return "";
+  };
 
   const simulateState = () => {
     setCurrentState((prev) => (prev === "focused" ? "distracted" : "focused"));
@@ -433,6 +485,73 @@ export default function App() {
   const focusWarningActive = focusLevel < 0.7;
 
   useEffect(() => {
+    if (!lessonStarted) {
+      return;
+    }
+    if (!focusWarningActive) {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+      alertQueuedRef.current = false;
+      return;
+    }
+    if (alertQueuedRef.current) {
+      return;
+    }
+    const startTime = distractedStartRef.current || Date.now();
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(4000 - elapsed, 0);
+    alertTimeoutRef.current = setTimeout(() => {
+      if (!focusWarningActive || alertQueuedRef.current) {
+        return;
+      }
+      const stateCandidate = distractorReason || visionState;
+      const alertKey = alertKeyForState(stateCandidate);
+      if (!alertKey) {
+        return;
+      }
+      const asset = characterAssets[characterChoice]?.[alertKey];
+      if (!asset) {
+        return;
+      }
+      alertQueuedRef.current = true;
+      setAlertQueue((prev) => [...prev, asset]);
+    }, remaining);
+
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+    };
+  }, [
+    focusWarningActive,
+    lessonStarted,
+    distractorReason,
+    visionState,
+    characterChoice,
+    effectiveIncludeTalking
+  ]);
+
+  useEffect(() => {
+    if (activeAlert || !alertQueue.length) {
+      return;
+    }
+    const next = alertQueue[0];
+    setAlertQueue((prev) => prev.slice(1));
+    setActiveAlert(next);
+  }, [activeAlert, alertQueue]);
+
+  useEffect(() => {
+    if (!activeAlert || !alertVideoRef.current) {
+      return;
+    }
+    alertVideoRef.current.currentTime = 0;
+    alertVideoRef.current.play().catch(() => {});
+  }, [activeAlert]);
+
+  useEffect(() => {
     if (!lessonStarted || !sessionStartRef.current) {
       return;
     }
@@ -531,11 +650,24 @@ export default function App() {
       {lessonStarted ? (
         <main className="session-view" ref={sessionRef}>
           <div className="session-background">
-            <p className="session-message">Session running</p>
-            <p className="subtle">
-              Your AI character will appear here later. For now, this is a
-              placeholder background.
-            </p>
+            <video
+              className="session-video"
+              src={characterAssets[characterChoice]?.filler}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+            {activeAlert && (
+              <video
+                ref={alertVideoRef}
+                className="session-video alert-video"
+                src={activeAlert}
+                autoPlay
+                playsInline
+                onEnded={() => setActiveAlert("")}
+              />
+            )}
           </div>
           {focusWarningActive && (
             <div className="session-alert">
@@ -707,6 +839,19 @@ export default function App() {
             </p>
             <form className="intro-form" onSubmit={startLesson}>
               <label className="field">
+                <span>Accountability character</span>
+                <select
+                  value={characterChoice}
+                  onChange={(event) => setCharacterChoice(event.target.value)}
+                >
+                  {Object.entries(characterAssets).map(([key, value]) => (
+                    <option value={key} key={key}>
+                      {value.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>Study length (minutes)</span>
                 <input
                   type="number"
@@ -727,20 +872,6 @@ export default function App() {
                   <option value="laptop">Working on laptop</option>
                   <option value="both">Both</option>
                 </select>
-              </label>
-              <label className="field">
-                <span>Accountability character</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Shrek"
-                  value={accountabilityCharacter}
-                  onChange={(event) =>
-                    setAccountabilityCharacter(event.target.value)
-                  }
-                />
-                <span className="helper">
-                  They will be responsible for keeping you in check while you work.
-                </span>
               </label>
               <button className="primary" type="submit">
                 Start session
