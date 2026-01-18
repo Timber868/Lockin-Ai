@@ -5,9 +5,7 @@ text-to-speech service for the FocusAI system.
 """
 
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 
@@ -27,40 +25,42 @@ DEFAULT_VOICE_ID = "KD9g1wXK6axrG4J0LGFn"
 
 def text_to_audio(
     text: str,
-    output_path: Optional[str] = None,
+    file_name: str,
+    directory: str = "default",
     voice_id: str = DEFAULT_VOICE_ID
 ) -> str:
     """Convert text input to audio output using ElevenLabs.
     
     Args:
         text: Input text to convert to speech
-        output_path: Optional path to save the audio file or directory.
-                     If None, saves to 'audio' folder in project root.
-                     If a directory, generates a filename with timestamp.
+        file_name: Name of the audio file (without extension, will be saved as .mp3)
+        directory: Subdirectory within reaction/audio/ to save the file.
+                   Creates directory if it doesn't exist.
+        voice_id: ElevenLabs voice ID to use for speech synthesis
     
     Returns:
-        Full file path where the audio was saved
+        Full file path where the audio was saved (with version number if file exists)
     
     Raises:
         Exception: If text-to-speech conversion fails
     """
-    # Determine output file path
-    if output_path is None:
-        # Default to 'audio' folder in project root
-        output_dir = Path(__file__).parent.parent.parent / "audio"
-        output_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = output_dir / f"audio_{timestamp}.mp3"
-    else:
-        output_path = Path(output_path)
-        # If output_path is a directory, generate filename
-        if output_path.is_dir() or not output_path.suffix:
-            output_path.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = output_path / f"audio_{timestamp}.mp3"
-        else:
-            # Ensure parent directory exists
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Base audio directory: reaction/audio/
+    base_audio_dir = Path(__file__).parent / "audio"
+    
+    # Create directory structure: reaction/audio/{directory}/
+    output_dir = base_audio_dir / directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Ensure file_name has .mp3 extension (remove if already present, then add)
+    file_name = file_name.replace(".mp3", "")
+    base_file_path = output_dir / f"{file_name}.mp3"
+    
+    # Check if file exists and increment version if needed
+    output_path = base_file_path
+    version = 1
+    while output_path.exists():
+        version += 1
+        output_path = output_dir / f"{file_name}_v{version}.mp3"
     
     # Convert text to speech using ElevenLabs
     with _client.text_to_speech.with_raw_response.convert(
@@ -81,6 +81,11 @@ def text_to_audio(
 
 if __name__ == "__main__":
     # Example usage
-    sample_text = "Hi!"
-    audio_path = text_to_audio(sample_text, voice_id="Xb7hH8MSUJpSbSDYk0k2")
+    sample_text = "Hello, this is the diddy boy test of the text-to-speech system."
+    audio_path = text_to_audio(
+        text=sample_text,
+        file_name="test_audio",
+        directory="flash mcqueen speech",
+        voice_id=DEFAULT_VOICE_ID
+    )
     print(f"Audio conversion completed. Saved to: {audio_path}")
