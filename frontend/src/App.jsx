@@ -17,7 +17,6 @@ const sampleTimeline = [
 export default function App() {
   const [lessonMinutes, setLessonMinutes] = useState("45");
   const [workMode, setWorkMode] = useState("laptop");
-  const [accountabilityCharacter, setAccountabilityCharacter] = useState("");
   const [lessonStarted, setLessonStarted] = useState(false);
   const [trackingEnabled, setTrackingEnabled] = useState(true);
   const [confidence, setConfidence] = useState(0.82);
@@ -25,6 +24,7 @@ export default function App() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [focusResults, setFocusResults] = useState([]);
   const [focusLevel, setFocusLevel] = useState(1);
+  const focusLevelRef = useRef(1);
   const [sessionSummary, setSessionSummary] = useState(null);
   const [sessionTimeline, setSessionTimeline] = useState([]);
   const [rightPanelView, setRightPanelView] = useState("timeline");
@@ -38,6 +38,10 @@ export default function App() {
   const lastPayloadRef = useRef(null);
   const recentStatesRef = useRef([]);
   const socketRef = useRef(null);
+  const alertVideoRef = useRef(null);
+  const alertTimeoutRef = useRef(null);
+  const alertQueuedRef = useRef(false);
+  const reminderTimeoutRef = useRef(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -49,6 +53,7 @@ export default function App() {
   const distractedCountRef = useRef(0);
   const [cameraPosition, setCameraPosition] = useState({ x: 24, y: 24 });
   const dragState = useRef(null);
+  const endTriggeredRef = useRef(false);
   const [visionConfig, setVisionConfig] = useState({
     hMin: 0.35,
     hMax: 0.65,
@@ -59,6 +64,10 @@ export default function App() {
     includeTalking: true,
     includeObjects: true
   });
+  const [characterChoice, setCharacterChoice] = useState("cop");
+  const [alertQueue, setAlertQueue] = useState([]);
+  const [activeAlert, setActiveAlert] = useState(null);
+  const [endSessionPending, setEndSessionPending] = useState(false);
 
   const statusText = useMemo(() => {
     if (!trackingEnabled) {
@@ -73,6 +82,14 @@ export default function App() {
 
   const sendVisionConfig = (config) => {
     const socket = socketRef.current;
+    if (!socket) {
+      console.warn("[LockIn AI] Cannot send config: No socket connection.");
+      return;
+    }
+    if (socket.readyState !== WebSocket.OPEN) {
+      console.warn("[LockIn AI] Cannot send config: Socket not OPEN. State:", socket.readyState);
+      return;
+    }
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
@@ -94,6 +111,14 @@ export default function App() {
 
   const normalizeState = (value) =>
     String(value || "").trim().toLowerCase();
+  const swapLeftRightLabel = (value) => {
+    const text = String(value || "");
+    const swapped = text
+      .replace(/left/gi, "__swap_left__")
+      .replace(/right/gi, "left")
+      .replace(/__swap_left__/gi, "right");
+    return swapped;
+  };
   const isFocusedState = (value) =>
     value === "focused" || value === "at screen";
   const computeMostCommonDistractor = (states, includeTalking) => {
@@ -136,6 +161,88 @@ export default function App() {
   const effectiveIncludeTalking =
     backendConfig?.include_talking ?? visionConfig.includeTalking;
 
+  useEffect(() => {
+    focusLevelRef.current = focusLevel;
+  }, [focusLevel]);
+
+  const characterAssets = {
+    cop: {
+      label: "Cop",
+      filler: "/videos/cop/cop-filler.mp4",
+      side: "/videos/cop/Cop-side.mp4",
+      up: "/videos/cop/Cop-up.mp4",
+      phone: "/videos/cop/Cop-phone.mp4",
+      talking: "/videos/cop/Cop-talking.mp4",
+      gone: "/videos/cop/Cop-gone.mp4",
+      reminder: "/videos/cop/Cop-reminder.mp4",
+      praise: null
+    },
+    animegirl: {
+      label: "Anime Girl",
+      filler: "/videos/animegirl/animegirl-filler.mp4",
+      side: "/videos/animegirl/animegirl-side.mp4",
+      up: "/videos/animegirl/animegirl-up.mp4",
+      phone: "/videos/animegirl/animegirl-phone.mp4",
+      talking: "/videos/animegirl/animegirl-talking.mp4",
+      gone: "/videos/animegirl/animegirl-lost.mp4",
+      reminder: "/videos/animegirl/animegirl-reminder.mp4",
+      praise: "/videos/animegirl/animegirl-praise.mp4"
+    },
+    drillsergeant: {
+      label: "Drill Sergeant",
+      filler: "/videos/drillsergeant/drillsergeant-filler.mp4",
+      side: "/videos/drillsergeant/drillsergeant-side.mp4",
+      up: "/videos/drillsergeant/drillsergeant-up.mp4",
+      phone: "/videos/drillsergeant/drillsergeant-phone.mp4",
+      talking: "/videos/drillsergeant/drillsergeant-talking.mp4",
+      gone: "/videos/drillsergeant/drillsergeant-lost.mp4",
+      reminder: "/videos/drillsergeant/drillsergeant-reminder.mp4",
+      praise: "/videos/drillsergeant/drillsergeant-praise.mp4"
+    },
+    shrek: {
+      label: "Shrek",
+      filler: "/videos/shrek/shrek-filler.mp4",
+      side: "/videos/shrek/shrek-side.mp4",
+      up: "/videos/shrek/shrek-up.mp4",
+      phone: "/videos/shrek/shrek-phone.mp4",
+      talking: "/videos/shrek/shrek-talking.mp4",
+      gone: "/videos/shrek/shrek-gone.mp4",
+      reminder: "/videos/shrek/shrek-reminder.mp4",
+      praise: "/videos/shrek/shrek-praise.mp4"
+    }
+  };
+
+  const normalizedStateLabel = (value) => normalizeState(value);
+  const alertKeyForState = (value) => {
+    const normalized = normalizedStateLabel(value);
+    if (!normalized) {
+      return "";
+    }
+    if (normalized.includes("left") || normalized.includes("right")) {
+      return "side";
+    }
+    if (normalized.includes("up")) {
+      return "up";
+    }
+    if (normalized.includes("eyes closed")) {
+      return "up";
+    }
+    if (
+      normalized.includes("phone") ||
+      normalized.includes("book") ||
+      normalized.includes("down")
+    ) {
+      return "phone";
+    }
+    if (normalized.includes("talking")) {
+      return effectiveIncludeTalking ? "talking" : "";
+    }
+    if (normalized.includes("no face")) {
+      return "gone";
+    }
+    return "";
+  };
+
   const simulateState = () => {
     setCurrentState((prev) => (prev === "focused" ? "distracted" : "focused"));
     setConfidence((prev) => (prev > 0.6 ? 0.48 : 0.86));
@@ -155,6 +262,7 @@ export default function App() {
     setSessionTimeline([]);
     setFocusResults([]);
     setFocusLevel(1);
+    endTriggeredRef.current = false;
     sessionStartRef.current = Date.now();
     distractedStartRef.current = null;
     distractedTotalRef.current = 0;
@@ -186,6 +294,12 @@ export default function App() {
         focusedSeconds,
         alerts: distractedCountRef.current
       });
+    }
+    const praiseClip = characterAssets[characterChoice]?.praise;
+    if (praiseClip) {
+      setEndSessionPending(true);
+    setActiveAlert({ src: praiseClip, kind: "praise" });
+      return;
     }
     setLessonStarted(false);
   };
@@ -352,6 +466,18 @@ export default function App() {
       console.log("[LockIn AI] Vision socket connected");
       setVisionStatus("connected");
       setCameraReady(false);
+      const payload = {
+        type: "config",
+        h_min: visionConfig.hMin,
+        h_max: visionConfig.hMax,
+        v_min: visionConfig.vMin,
+        v_max: visionConfig.vMax,
+        ear_threshold: visionConfig.earThreshold,
+        audio_threshold: visionConfig.audioThreshold,
+        include_talking: visionConfig.includeTalking,
+        include_objects: visionConfig.includeObjects
+      };
+      socket.send(JSON.stringify(payload));
       sendVisionConfig(visionConfig);
     };
 
@@ -363,7 +489,7 @@ export default function App() {
         if (!effectiveIncludeTalking && incomingState.toLowerCase().includes("talking")) {
           setVisionState("Focused");
         } else {
-          setVisionState(incomingState);
+          setVisionState(swapLeftRightLabel(incomingState));
         }
         if (payload?.config) {
           setBackendConfig(payload.config);
@@ -381,7 +507,9 @@ export default function App() {
           );
           recentStatesRef.current = nextStates;
           setDistractorReason(
-            computeMostCommonDistractor(nextStates, effectiveIncludeTalking)
+            swapLeftRightLabel(
+              computeMostCommonDistractor(nextStates, effectiveIncludeTalking)
+            )
           );
         }
         if (payload?.state === "camera-error") {
@@ -411,11 +539,16 @@ export default function App() {
       setVisionState("");
       setCameraReady(false);
       setCameraError("Vision backend disconnected.");
-      socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
 
     return () => {
       socket.close();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
   }, [trackingEnabled]);
 
@@ -431,6 +564,93 @@ export default function App() {
   }, [visionConfig]);
 
   const focusWarningActive = focusLevel < 0.7;
+
+  useEffect(() => {
+    if (!lessonStarted) {
+      return;
+    }
+    if (!focusWarningActive) {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+      if (reminderTimeoutRef.current) {
+        clearTimeout(reminderTimeoutRef.current);
+        reminderTimeoutRef.current = null;
+      }
+      alertQueuedRef.current = false;
+      return;
+    }
+    if (alertQueuedRef.current) {
+      return;
+    }
+    const startTime = distractedStartRef.current || Date.now();
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(4000 - elapsed, 0);
+    alertTimeoutRef.current = setTimeout(() => {
+      if (!focusWarningActive || alertQueuedRef.current) {
+        return;
+      }
+      const stateCandidate = distractorReason || visionState;
+      const alertKey = alertKeyForState(stateCandidate);
+      if (!alertKey) {
+        return;
+      }
+      const asset = characterAssets[characterChoice]?.[alertKey];
+      if (!asset) {
+        return;
+      }
+      alertQueuedRef.current = true;
+      setAlertQueue((prev) => [...prev, { src: asset, kind: "alert" }]);
+    }, remaining);
+
+    return () => {
+      if (alertTimeoutRef.current) {
+        clearTimeout(alertTimeoutRef.current);
+        alertTimeoutRef.current = null;
+      }
+    };
+  }, [
+    focusWarningActive,
+    lessonStarted,
+    distractorReason,
+    visionState,
+    characterChoice,
+    effectiveIncludeTalking
+  ]);
+
+  useEffect(() => {
+    if (activeAlert || !alertQueue.length) {
+      return;
+    }
+    const next = alertQueue[0];
+    setAlertQueue((prev) => prev.slice(1));
+    setActiveAlert(next);
+  }, [activeAlert, alertQueue]);
+
+  useEffect(() => {
+    if (!activeAlert || !alertVideoRef.current) {
+      return;
+    }
+    alertVideoRef.current.currentTime = 0;
+    alertVideoRef.current.play().catch(() => {});
+  }, [activeAlert]);
+  const scheduleReminder = () => {
+    if (reminderTimeoutRef.current) {
+      clearTimeout(reminderTimeoutRef.current);
+      reminderTimeoutRef.current = null;
+    }
+    const reminderAsset = characterAssets[characterChoice]?.reminder;
+    if (!reminderAsset) {
+      return;
+    }
+    reminderTimeoutRef.current = setTimeout(() => {
+      if (focusLevelRef.current >= 0.7) {
+        return;
+      }
+      setAlertQueue((prev) => [...prev, { src: reminderAsset, kind: "reminder" }]);
+    }, 8000);
+  };
 
   useEffect(() => {
     if (!lessonStarted || !sessionStartRef.current) {
@@ -484,6 +704,10 @@ export default function App() {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
+          if (!endTriggeredRef.current) {
+            endTriggeredRef.current = true;
+            endLesson();
+          }
           return 0;
         }
         return prev - 1;
@@ -531,11 +755,43 @@ export default function App() {
       {lessonStarted ? (
         <main className="session-view" ref={sessionRef}>
           <div className="session-background">
-            <p className="session-message">Session running</p>
-            <p className="subtle">
-              Your AI character will appear here later. For now, this is a
-              placeholder background.
-            </p>
+            <video
+              className="session-video"
+              src={characterAssets[characterChoice]?.filler}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+            {activeAlert && (
+              <video
+                ref={alertVideoRef}
+                className="session-video alert-video"
+                src={activeAlert.src}
+                autoPlay
+                playsInline
+                onEnded={() => {
+                  const wasAlert = activeAlert.kind === "alert";
+                  const wasReminder = activeAlert.kind === "reminder";
+                  setActiveAlert(null);
+                  if (wasReminder) {
+                    setFocusResults([1]);
+                    setFocusLevel(1);
+                    setCurrentState("focused");
+                    setDistractorReason("");
+                    distractedStartRef.current = null;
+                    alertQueuedRef.current = false;
+                  }
+                  if (wasAlert && focusWarningActive) {
+                    scheduleReminder();
+                  }
+                  if (endSessionPending) {
+                    setEndSessionPending(false);
+                    setLessonStarted(false);
+                  }
+                }}
+              />
+            )}
           </div>
           {focusWarningActive && (
             <div className="session-alert">
@@ -707,12 +963,25 @@ export default function App() {
             </p>
             <form className="intro-form" onSubmit={startLesson}>
               <label className="field">
+                <span>Accountability character</span>
+                <select
+                  value={characterChoice}
+                  onChange={(event) => setCharacterChoice(event.target.value)}
+                >
+                  {Object.entries(characterAssets).map(([key, value]) => (
+                    <option value={key} key={key}>
+                      {value.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>Study length (minutes)</span>
                 <input
                   type="number"
-                  min="5"
+                    min="1"
                   max="240"
-                  step="5"
+                    step="1"
                   value={lessonMinutes}
                   onChange={(event) => setLessonMinutes(event.target.value)}
                 />
@@ -727,20 +996,6 @@ export default function App() {
                   <option value="laptop">Working on laptop</option>
                   <option value="both">Both</option>
                 </select>
-              </label>
-              <label className="field">
-                <span>Accountability character</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Shrek"
-                  value={accountabilityCharacter}
-                  onChange={(event) =>
-                    setAccountabilityCharacter(event.target.value)
-                  }
-                />
-                <span className="helper">
-                  They will be responsible for keeping you in check while you work.
-                </span>
               </label>
               <button className="primary" type="submit">
                 Start session
