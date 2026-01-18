@@ -26,7 +26,7 @@ const DEFAULT_VISION_CONFIG = {
 };
 
 export default function App() {
-  const [lessonMinutes, setLessonMinutes] = useState("45");
+  const [lessonMinutes, setLessonMinutes] = useState("2");
   const [workMode, setWorkMode] = useState("laptop");
   const [lessonStarted, setLessonStarted] = useState(false);
   const [trackingEnabled, setTrackingEnabled] = useState(true);
@@ -66,7 +66,7 @@ export default function App() {
   const dragState = useRef(null);
   const endTriggeredRef = useRef(false);
   const [visionConfig, setVisionConfig] = useState(DEFAULT_VISION_CONFIG);
-  const [characterChoice, setCharacterChoice] = useState("cop");
+  const [characterChoice, setCharacterChoice] = useState("drillsergeant");
   const [alertQueue, setAlertQueue] = useState([]);
   const [activeAlert, setActiveAlert] = useState(null);
   const [endSessionPending, setEndSessionPending] = useState(false);
@@ -179,9 +179,9 @@ export default function App() {
       up: "/videos/cop/Cop-up.mp4",
       phone: "/videos/cop/Cop-phone.mp4",
       talking: "/videos/cop/Cop-talking.mp4",
-      gone: "/videos/cop/Cop-gone.mp4",
+      gone: "/videos/cop/cop-lost.mp4",
       reminder: "/videos/cop/Cop-reminder.mp4",
-      praise: null
+      praise: "/videos/cop/cop-praise.mp4"
     },
     animegirl: {
       label: "Anime Girl",
@@ -212,9 +212,31 @@ export default function App() {
       up: "/videos/shrek/shrek-up.mp4",
       phone: "/videos/shrek/shrek-phone.mp4",
       talking: "/videos/shrek/shrek-talking.mp4",
-      gone: "/videos/shrek/shrek-gone.mp4",
+      gone: "/videos/shrek/shrek-lost.mp4",
       reminder: "/videos/shrek/shrek-reminder.mp4",
       praise: "/videos/shrek/shrek-praise.mp4"
+    },
+    clown: {
+      label: "Clown",
+      filler: "/videos/clown/clown-filler.mp4",
+      side: "/videos/clown/clown-side.mp4",
+      up: "/videos/clown/clown-up.mp4",
+      phone: "/videos/clown/clown-phone.mp4",
+      talking: "/videos/clown/clown-talking.mp4",
+      gone: "/videos/clown/clown-lost.mp4",
+      reminder: "/videos/clown/clown-reminder.mp4",
+      praise: "/videos/clown/clown-praise.mp4"
+    },
+    wizard: {
+      label: "Wizard",
+      filler: "/videos/wizard/wizard-filler.mp4",
+      side: "/videos/wizard/wizard-side.mp4",
+      up: "/videos/wizard/wizard-up.mp4",
+      phone: "/videos/wizard/wizard-phone.mp4",
+      talking: "/videos/wizard/wizard-talking.mp4",
+      gone: "/videos/wizard/wizard-lost.mp4",
+      reminder: "/videos/wizard/wizard-reminder.mp4",
+      praise: "/videos/wizard/wizard-praise.mp4"
     }
   };
 
@@ -741,16 +763,9 @@ export default function App() {
         <div>
           <p className="eyebrow">LockIn AI</p>
           <h1>Real-time focus monitoring</h1>
-          <p className="subtle">
-            React dashboard prototype for the LockIn AI pipeline. Backend wiring
-            can be added later via WebSocket or REST.
-          </p>
         </div>
         {lessonStarted && (
           <div className="header-actions">
-            <button className="ghost" onClick={simulateState} type="button">
-              Simulate state
-            </button>
             <button className="primary" onClick={toggleTracking} type="button">
               {trackingEnabled ? "Stop tracking" : "Start tracking"}
             </button>
