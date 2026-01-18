@@ -23,7 +23,7 @@ def _safe_float(value):
         return None
 
 
-def _start_stream(queue, loop, stop_event, camera_id):
+def _start_stream(queue, loop, stop_event, camera_id, config, config_lock):
     tracker = None
     try:
         try:
@@ -50,7 +50,25 @@ def _start_stream(queue, loop, stop_event, camera_id):
         last_preview_time = 0.0
         first_payload_logged = False
         while not stop_event.is_set():
-            state, metrics, _frame = tracker.get_frame_analysis()
+            with config_lock:
+                active_config = dict(config)
+            state, metrics, _frame = tracker.get_frame_analysis(
+                enable_face_orientation=True,
+                enable_eye_detection=True,
+                enable_object_detection=active_config["include_objects"],
+                enable_audio_detection=active_config["include_talking"],
+                h_thresholds=(active_config["h_min"], active_config["h_max"]),
+                v_thresholds=(active_config["v_min"], active_config["v_max"]),
+                ear_threshold=active_config["ear_threshold"],
+                conf_threshold=active_config["conf_threshold"],
+                audio_threshold=active_config["audio_threshold"]
+            )
+            if (
+                not active_config["include_talking"]
+                and isinstance(state, str)
+                and "TALKING" in state.upper()
+            ):
+                state = "Focused"
             if state is None and metrics is None:
                 LOG.error("Vision camera read failed camera_id=%s", camera_id)
                 loop.call_soon_threadsafe(
@@ -119,8 +137,22 @@ async def handler(websocket):
 
     camera_id = int(os.getenv("LOCKIN_CAMERA_ID", "0"))
     log_every = int(os.getenv("LOCKIN_VISION_LOG_EVERY", "30"))
+    config_lock = threading.Lock()
+    config = {
+        "h_min": 0.35,
+        "h_max": 0.65,
+        "v_min": 0.35,
+        "v_max": 0.60,
+        "ear_threshold": 0.30,
+        "conf_threshold": 0.50,
+        "audio_threshold": 1.50,
+        "include_talking": True,
+        "include_objects": True
+    }
     thread = threading.Thread(
-        target=_start_stream, args=(queue, loop, stop_event, camera_id), daemon=True
+        target=_start_stream,
+        args=(queue, loop, stop_event, camera_id, config, config_lock),
+        daemon=True
     )
     thread.start()
     client = getattr(websocket, "remote_address", None)
@@ -128,6 +160,25 @@ async def handler(websocket):
 
     sent_count = 0
     last_log_time = time.time()
+    async def listen_for_config():
+        while True:
+            try:
+                message = await websocket.recv()
+            except websockets.ConnectionClosed:
+                break
+            if message is None:
+                break
+            try:
+                data = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and data.get("type") == "config":
+                with config_lock:
+                    for key in config:
+                        if key in data:
+                            config[key] = data[key]
+
+    listener_task = asyncio.create_task(listen_for_config())
     try:
         while True:
             payload = await queue.get()
@@ -150,6 +201,7 @@ async def handler(websocket):
     except websockets.ConnectionClosed:
         LOG.info("Vision client disconnected client=%s", client)
     finally:
+        listener_task.cancel()
         stop_event.set()
 
 
