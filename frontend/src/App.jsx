@@ -32,6 +32,8 @@ export default function App() {
   const [visionState, setVisionState] = useState("");
   const [visionFrame, setVisionFrame] = useState("");
   const [visionVolume, setVisionVolume] = useState(null);
+  const [backendConfig, setBackendConfig] = useState(null);
+  const [lastConfigSentAt, setLastConfigSentAt] = useState(null);
   const [distractorReason, setDistractorReason] = useState("");
   const lastPayloadRef = useRef(null);
   const recentStatesRef = useRef([]);
@@ -74,31 +76,35 @@ export default function App() {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return;
     }
-    socket.send(
-      JSON.stringify({
-        type: "config",
-        h_min: config.hMin,
-        h_max: config.hMax,
-        v_min: config.vMin,
-        v_max: config.vMax,
-        ear_threshold: config.earThreshold,
-        audio_threshold: config.audioThreshold,
-        include_talking: config.includeTalking,
-        include_objects: config.includeObjects
-      })
-    );
+    const payload = {
+      type: "config",
+      h_min: config.hMin,
+      h_max: config.hMax,
+      v_min: config.vMin,
+      v_max: config.vMax,
+      ear_threshold: config.earThreshold,
+      audio_threshold: config.audioThreshold,
+      include_talking: config.includeTalking,
+      include_objects: config.includeObjects
+    };
+    socket.send(JSON.stringify(payload));
+    setLastConfigSentAt(Date.now());
+    console.log("[LockIn AI] Sent vision config", payload);
   };
 
   const normalizeState = (value) =>
     String(value || "").trim().toLowerCase();
   const isFocusedState = (value) =>
     value === "focused" || value === "at screen";
-  const computeMostCommonDistractor = (states) => {
+  const computeMostCommonDistractor = (states, includeTalking) => {
     const counts = {};
     const labels = {};
     states.forEach((state) => {
       const normalized = normalizeState(state);
       if (!normalized || isFocusedState(normalized)) {
+        return;
+      }
+      if (!includeTalking && normalized.includes("talking")) {
         return;
       }
       counts[normalized] = (counts[normalized] || 0) + 1;
@@ -127,6 +133,8 @@ export default function App() {
       ? "var(--warning)"
       : "#ef4444";
   const statusColor = trackingEnabled ? focusMeterColor : statusColors.offline;
+  const effectiveIncludeTalking =
+    backendConfig?.include_talking ?? visionConfig.includeTalking;
 
   const simulateState = () => {
     setCurrentState((prev) => (prev === "focused" ? "distracted" : "focused"));
@@ -283,7 +291,7 @@ export default function App() {
       return { focused: false, reason: "distractor" };
     }
 
-    if (visionConfig.includeTalking && normalizedState.includes("talking")) {
+    if (effectiveIncludeTalking && normalizedState.includes("talking")) {
       return { focused: false, reason: "audio" };
     }
 
@@ -351,7 +359,15 @@ export default function App() {
       try {
         const payload = JSON.parse(event.data);
         lastPayloadRef.current = payload;
-        setVisionState(payload?.state ? String(payload.state) : "");
+        const incomingState = payload?.state ? String(payload.state) : "";
+        if (!effectiveIncludeTalking && incomingState.toLowerCase().includes("talking")) {
+          setVisionState("Focused");
+        } else {
+          setVisionState(incomingState);
+        }
+        if (payload?.config) {
+          setBackendConfig(payload.config);
+        }
         if (payload?.preview_jpeg) {
           setVisionFrame(payload.preview_jpeg);
           setCameraReady(true);
@@ -364,7 +380,9 @@ export default function App() {
             -60
           );
           recentStatesRef.current = nextStates;
-          setDistractorReason(computeMostCommonDistractor(nextStates));
+          setDistractorReason(
+            computeMostCommonDistractor(nextStates, effectiveIncludeTalking)
+          );
         }
         if (payload?.state === "camera-error") {
           setCameraError("Vision backend cannot read the camera.");
@@ -403,6 +421,13 @@ export default function App() {
 
   useEffect(() => {
     sendVisionConfig(visionConfig);
+  }, [visionConfig]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      sendVisionConfig(visionConfig);
+    }, 2000);
+    return () => clearInterval(interval);
   }, [visionConfig]);
 
   const focusWarningActive = focusLevel < 0.7;
@@ -612,6 +637,17 @@ export default function App() {
               <p className="footer-subtle">
                 Audio {visionVolume !== null ? visionVolume.toFixed(2) : "--"} /
                 {` ${visionConfig.audioThreshold}`}
+              </p>
+              {backendConfig && (
+                <p className="footer-subtle">
+                  Backend talking: {backendConfig.include_talking ? "on" : "off"}
+                </p>
+              )}
+              <p className="footer-subtle">
+                Config sent:{" "}
+                {lastConfigSentAt
+                  ? `${Math.round((Date.now() - lastConfigSentAt) / 1000)}s ago`
+                  : "never"}
               </p>
             </div>
             <button className="ghost" type="button" onClick={endLesson}>

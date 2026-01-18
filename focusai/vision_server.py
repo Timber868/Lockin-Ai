@@ -105,7 +105,11 @@ def _start_stream(queue, loop, stop_event, camera_id, config, config_lock):
                 "camera_id": camera_id,
                 "timestamp_ms": int(time.time() * 1000),
                 "frame_index": frame_index,
-                "face_detected": face_detected
+                "face_detected": face_detected,
+                "config": {
+                    "include_talking": active_config["include_talking"],
+                    "audio_threshold": active_config["audio_threshold"]
+                }
             }
             if preview_interval and _frame is not None:
                 now = time.time()
@@ -177,6 +181,16 @@ async def handler(websocket):
                     for key in config:
                         if key in data:
                             config[key] = data[key]
+                LOG.info(
+                    "Vision config updated include_talking=%s audio_threshold=%s h=[%s,%s] v=[%s,%s] ear=%s",
+                    config["include_talking"],
+                    config["audio_threshold"],
+                    config["h_min"],
+                    config["h_max"],
+                    config["v_min"],
+                    config["v_max"],
+                    config["ear_threshold"]
+                )
 
     listener_task = asyncio.create_task(listen_for_config())
     try:
