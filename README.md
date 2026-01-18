@@ -10,14 +10,16 @@ LockIn AI uses computer vision and machine learning to detect whether a user is 
 
 ```
 Lockin-Ai/
-├── focusai/                    # Main package
+├── focusai/                    # Main Python package
 │   ├── __init__.py            # Package initialization
 │   ├── models.py              # Shared dataclasses
 │   ├── config.py              # Configuration management
 │   ├── logging_setup.py       # Logging configuration
+│   ├── vision_server.py       # WebSocket vision server (main backend)
 │   ├── capture/               # Camera frame capture
 │   │   ├── __init__.py
-│   │   └── camera.py          # Camera capture implementation
+│   │   ├── focus_tracker.py   # Focus detection tracker
+│   │   └── tempMain.py        # Temporary test scripts
 │   ├── preprocess/            # Frame preprocessing
 │   │   ├── __init__.py
 │   │   ├── processor.py       # Frame preprocessing
@@ -25,9 +27,19 @@ Lockin-Ai/
 │   ├── inference/             # Focus detection inference
 │   │   ├── __init__.py
 │   │   └── detector.py        # Focus detection model
-│   └── ui/                    # User interface
-│       ├── __init__.py
-│       └── monitor.py         # Live monitoring UI
+│   ├── ui/                    # User interface
+│   │   ├── __init__.py
+│   │   └── monitor.py         # Live monitoring UI
+│   └── videos/                # Character reaction videos
+│       ├── animegirl/         # Anime girl character videos
+│       ├── cop/               # Cop character videos
+│       ├── drillsergeant/     # Drill sergeant videos
+│       └── shrek/             # Shrek character videos
+├── frontend/                  # React web frontend
+│   ├── src/                   # React source code
+│   ├── public/                # Static assets
+│   ├── package.json           # Node.js dependencies
+│   └── vite.config.js         # Vite configuration
 ├── tests/                     # Test suite
 │   ├── __init__.py
 │   ├── test_capture.py
@@ -38,10 +50,11 @@ Lockin-Ai/
 │   └── test_models.py
 ├── docs/                      # Documentation
 │   └── architecture.md        # Architecture details
-├── main.py                    # Main entry point
+├── main.py                    # Legacy CLI entry point
 ├── pyproject.toml             # Project metadata
-├── requirements.txt           # Core dependencies
+├── requirements.txt           # Python dependencies
 ├── requirements-dev.txt       # Development dependencies
+├── .env.example               # Environment variables template
 ├── README.md                  # This file
 ├── LICENSE                    # MIT License
 └── .gitignore                # Git ignore rules
@@ -59,176 +72,107 @@ Lockin-Ai/
 
 ## Installation
 
-### Basic Installation
+### Prerequisites
+
+- **Python 3.9+** (3.12 recommended)
+- **Node.js 18+** and npm (for frontend)
+- **Virtual environment** (recommended)
+
+### Python Backend Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/Timber868/Lockin-Ai.git
 cd Lockin-Ai
 
+# Create and activate virtual environment (recommended)
+python -m venv .venv
+
+# On Windows (PowerShell):
+.\.venv\Scripts\Activate.ps1
+
+# On Windows (Git Bash/Command Prompt):
+source .venv/Scripts/activate
+
+# On Linux/Mac:
+source .venv/bin/activate
+
 # Install core dependencies
 pip install -r requirements.txt
 ```
 
-### Full Installation (with all optional dependencies)
+### Environment Variables
+
+Create a `.env` file in the project root for API keys (if needed):
 
 ```bash
-# Install with computer vision support
-pip install -r requirements.txt opencv-python mediapipe
-
-# Install with machine learning support
-pip install torch torchvision onnxruntime
-
-# Install with UI support
-pip install pygame
-
-# Or install everything using pyproject.toml
-pip install -e ".[all]"
+# .env file
+ELEVENLABS_API_KEY=your_api_key_here
+LOCKIN_CAMERA_ID=0
+LOCKIN_VISION_PORT=8765
 ```
 
-### Development Installation
-
-```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Or use pyproject.toml
-pip install -e ".[dev]"
-```
 
 ## Usage
 
-### Running the System
+### Running the Vision Server (Python Backend)
+
+The vision server processes camera input and sends focus tracking data to the frontend via WebSocket.
 
 ```bash
-# Run with default settings
-python main.py
+# Make sure virtual environment is activated
+# .\.venv\Scripts\Activate.ps1  (Windows PowerShell)
 
-# Specify camera device
-python main.py --camera 0
+# Run the vision server
+python -m focusai.vision_server
 
-# Set log level
-python main.py --log-level DEBUG
-
-# Use custom configuration file
-python main.py --config config.yaml
-
-# Save logs to file
-python main.py --log-file lockin-ai.log
+# Or with custom camera/port (via environment variables)
+$env:LOCKIN_CAMERA_ID=0
+$env:LOCKIN_VISION_PORT=8765
+python -m focusai.vision_server
 ```
+
+The vision server will start on `ws://localhost:8765` by default.
 
 ## Web Frontend (React)
 
-This repo now includes a React-based web dashboard under `frontend/`. It is a
-standalone UI prototype that can be wired to the Python service later.
+This repo includes a React-based web dashboard that connects to the Python vision server via WebSocket.
+
+### Frontend Prerequisites
+
+- **Node.js 18+** and npm installed
+- Check your Node version: `node --version`
+
+### Frontend Setup
 
 ```bash
+# Navigate to frontend directory
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start development server
 npm run dev
 ```
 
-Then open `http://localhost:5173`.
+The frontend will be available at `http://localhost:5173`.
 
-### Configuration
-
-Configuration can be provided via:
-1. Configuration file (JSON/YAML) - use `--config` flag
-2. Command line arguments
-3. Environment variables
-4. Default values in code
-
-Example configuration structure:
-```python
-from focusai.config import Config, CaptureConfig, PreprocessConfig, InferenceConfig, UIConfig
-
-config = Config(
-    capture=CaptureConfig(camera_id=0, fps=30, width=640, height=480),
-    preprocess=PreprocessConfig(target_size=(224, 224), normalize=True),
-    inference=InferenceConfig(confidence_threshold=0.7, device="cpu"),
-    ui=UIConfig(alert_threshold=0.5, show_confidence=True),
-    log_level="INFO"
-)
-```
-
-## Architecture
-
-The system follows a pipeline architecture with four main stages:
-
-1. **Capture**: Camera frames are captured at a specified FPS
-2. **Preprocess**: Frames are normalized, resized, and prepared for analysis
-3. **Inference**: ML model determines focus state and confidence
-4. **UI**: Results are displayed with visual feedback and alerts
-
-See [docs/architecture.md](docs/architecture.md) for detailed architecture information.
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_capture.py
-
-# Run with coverage
-pytest --cov=focusai --cov-report=html
-
-# Run specific test
-pytest tests/test_config.py::TestConfig::test_load_default_config
-```
-
-## Development
-
-### Code Style
-
-The project uses:
-- **Black** for code formatting
-- **Flake8** for linting
-- **MyPy** for type checking
-
-```bash
-# Format code
-black focusai/ tests/
-
-# Lint code
-flake8 focusai/ tests/
-
-# Type check
-mypy focusai/
-```
+**Note:** The frontend connects to the Python vision server running on `ws://localhost:8765` by default.
 
 ### Project Status
 
-⚠️ **Current Status**: Project skeleton only - no CV/ML implementation yet
+✅ **Current Status**: Core functionality implemented
 
-This is a skeleton project with:
-- ✅ Complete module structure
-- ✅ Function signatures and interfaces
-- ✅ Configuration management
-- ✅ Logging setup
-- ✅ Basic tests
-- ✅ Documentation
-- ❌ Actual computer vision implementation (TODO)
-- ❌ Trained ML models (TODO)
-- ❌ UI rendering implementation (TODO)
-
-## Next Steps
-
-To implement the full system:
-
-1. **Camera Capture**: Implement actual camera capture using OpenCV
-2. **Preprocessing**: Add face detection, frame normalization, and resizing
-3. **Feature Extraction**: Implement facial landmark detection, gaze tracking, head pose estimation
-4. **Model Training**: Train or integrate a focus detection model
-5. **Inference**: Load and run the trained model
-6. **UI Implementation**: Build the actual UI using pygame/tkinter/OpenCV
-7. **Testing**: Add comprehensive tests with mock data
-8. **Optimization**: Profile and optimize for real-time performance
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+The project includes:
+- ✅ Computer vision implementation with MediaPipe face detection
+- ✅ Focus tracking with eye aspect ratio (EAR) and head pose detection
+- ✅ WebSocket-based vision server for real-time data streaming
+- ✅ React frontend with real-time focus visualization
+- ✅ Character-based reaction system with video playback
+- ✅ Configuration management and logging
+- ✅ Test suite framework
+- ✅ Complete documentation
 
 ## License
 
@@ -236,11 +180,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Team
 
-Built for McHacks 2026 by the Lockin-AI team.
-
-## Acknowledgments
-
-- OpenCV for computer vision capabilities
-- MediaPipe for face and pose detection
-- PyTorch for machine learning framework 
-
+Built for McHacks 2026 by the Lockin-AI team:
+- Tim Roma
+- Marrec Bois
+- Garrett Woodson
