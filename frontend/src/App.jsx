@@ -144,7 +144,7 @@ export default function App() {
     };
   }, []);
 
-  const previewEnabled = trackingEnabled && visionStatus !== "connected";
+  const previewEnabled = false;
 
   useEffect(() => {
     let stream;
@@ -263,9 +263,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!lessonStarted) {
-      setFocusResults([]);
-      setFocusLevel(1);
+    if (!trackingEnabled) {
       setVisionStatus("idle");
       return;
     }
@@ -284,6 +282,7 @@ export default function App() {
         setVisionState(payload?.state ? String(payload.state) : "");
         if (payload?.preview_jpeg) {
           setVisionFrame(payload.preview_jpeg);
+          setCameraReady(true);
         }
         if (payload?.state === "camera-error") {
           setCameraError("Vision backend cannot read the camera.");
@@ -311,7 +310,7 @@ export default function App() {
     return () => {
       socket.close();
     };
-  }, [lessonStarted]);
+  }, [trackingEnabled]);
 
   const focusWarningActive = focusLevel < 0.7;
 
@@ -511,17 +510,25 @@ export default function App() {
               <span className="chip">Device 0</span>
             </div>
             <div className="camera-placeholder">
-              <video
-                ref={videoRef}
-                className="camera-video"
-                autoPlay
-                playsInline
-                muted
-                onLoadedMetadata={() => {
-                  setCameraReady(true);
-                  setCameraError("");
-                }}
-              />
+              {previewEnabled ? (
+                <video
+                  ref={videoRef}
+                  className="camera-video"
+                  autoPlay
+                  playsInline
+                  muted
+                  onLoadedMetadata={() => {
+                    setCameraReady(true);
+                    setCameraError("");
+                  }}
+                />
+              ) : visionFrame ? (
+                <img
+                  className="camera-video"
+                  src={`data:image/jpeg;base64,${visionFrame}`}
+                  alt="Vision preview"
+                />
+              ) : null}
               {(cameraError || !cameraReady) && (
                 <div className="camera-overlay">
                   <div className="camera-ring" />
