@@ -4,7 +4,24 @@ import time
 import os
 import numpy as np
 import sounddevice as sd
-from ultralytics import YOLO
+
+
+def _open_camera(camera_index: int) -> cv2.VideoCapture:
+    """
+    Try common OpenCV backends for more reliable camera access on Windows.
+    """
+    backends = []
+    if os.name == "nt":
+        backends.extend([cv2.CAP_DSHOW, cv2.CAP_MSMF])
+    backends.append(cv2.CAP_ANY)
+
+    for backend in backends:
+        cap = cv2.VideoCapture(camera_index, backend)
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            return cap
+        cap.release()
+    return cv2.VideoCapture(camera_index)
 
 class FocusTracker:
     def __init__(self, camera_index=1, model_name='yolov8n.pt'):
@@ -18,8 +35,11 @@ class FocusTracker:
             running_mode=mp.tasks.vision.RunningMode.VIDEO)
         self.landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(self.options)
 
-        # 2. YOLO Setup
-        self.yolo_model = YOLO(model_name)
+        # 2. YOLO Setup (lazy-load to avoid long startup stalls)
+        self.yolo_available = True
+        self.yolo_model = None
+        self.yolo_model_name = model_name
+        self.yolo_loaded = False
         self.distraction_classes = [67, 73] # Cell phone, Book
 
         # 3. Audio Setup (Non-blocking)
@@ -34,7 +54,10 @@ class FocusTracker:
             print(f"Warning: Mic not found or error: {e}")
 
         # 4. Camera Setup
-        self.cap = cv2.VideoCapture(camera_index)
+        self.cap = _open_camera(camera_index)
+        if not self.cap or not self.cap.isOpened():
+            raise RuntimeError(f"Unable to open camera {camera_index}")
+        print(f"Camera ready (index {camera_index})")
         
     def _audio_callback(self, indata, frames, time, status):
         """Calculates volume (RMS) from the microphone input stream."""
@@ -93,8 +116,18 @@ class FocusTracker:
                     state = "TALKING"
                 
         # --- 3. OBJECT DETECTION (YOLO) ---
-        if enable_object_detection:
-            yolo_results = self.yolo_model(frame, stream=True, verbose=False)
+        if enable_object_detection and self.yolo_available:
+            if not self.yolo_loaded:
+                try:
+                    from ultralytics import YOLO
+                    self.yolo_model = YOLO(self.yolo_model_name)
+                    self.yolo_loaded = True
+                    print("YOLO model loaded.")
+                except Exception as exc:
+                    self.yolo_available = False
+                    print(f"Warning: YOLO unavailable ({exc}). Object detection disabled.")
+            if self.yolo_model is not None:
+                yolo_results = self.yolo_model(frame, stream=True, verbose=False)
             for r in yolo_results:
                 for box in r.boxes:
                     cls_id = int(box.cls[0])

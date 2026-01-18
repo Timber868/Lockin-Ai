@@ -1,9 +1,11 @@
 from focus_tracker import FocusTracker
 import cv2
+import time
 
-tracker = FocusTracker(camera_index=1)
+tracker = FocusTracker(camera_index=0)
 
 print("Starting... Press 'q' to quit.")
+last_no_frame_log = 0
 
 while True:
     # EXAMPLE 1: Standard Run (Defaults)
@@ -28,6 +30,11 @@ while True:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         
         cv2.imshow("Hackathon App", frame)
+    else:
+        now = time.time()
+        if now - last_no_frame_log >= 1:
+            print("Waiting for camera frame...")
+            last_no_frame_log = now
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break

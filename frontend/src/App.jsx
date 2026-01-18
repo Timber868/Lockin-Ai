@@ -28,6 +28,10 @@ export default function App() {
   const [sessionSummary, setSessionSummary] = useState(null);
   const [sessionTimeline, setSessionTimeline] = useState([]);
   const [rightPanelView, setRightPanelView] = useState("timeline");
+  const [visionStatus, setVisionStatus] = useState("idle");
+  const [visionState, setVisionState] = useState("");
+  const [visionFrame, setVisionFrame] = useState("");
+  const lastPayloadRef = useRef(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -140,11 +144,16 @@ export default function App() {
     };
   }, []);
 
+  const previewEnabled = trackingEnabled && visionStatus !== "connected";
+
   useEffect(() => {
     let stream;
     const enableCamera = async () => {
-      if (!trackingEnabled) {
+      if (!previewEnabled) {
         setCameraReady(false);
+        if (visionStatus === "connected") {
+          setCameraError("Preview paused while vision backend is connected.");
+        }
         if (videoRef.current) {
           videoRef.current.srcObject = null;
         }
@@ -175,7 +184,7 @@ export default function App() {
       }
       streamRef.current = null;
     };
-  }, [trackingEnabled]);
+  }, [previewEnabled, visionStatus]);
 
   const evaluateFocus = (visionData) => {
     const {
@@ -183,7 +192,8 @@ export default function App() {
       v_ratio: vRatio,
       left_ear: leftEar,
       state,
-      objects
+      objects,
+      volume
     } = visionData || {};
 
     const normalizedState = String(state || "").toLowerCase();
@@ -191,7 +201,7 @@ export default function App() {
       String(item).toLowerCase()
     );
 
-    const distractedObjects = ["phone", "cell phone", "tablet", "ipad"];
+    const distractedObjects = ["phone", "cell phone", "tablet", "ipad", "book"];
     const hasDistractor = normalizedObjects.some((item) =>
       distractedObjects.includes(item)
     );
@@ -200,11 +210,23 @@ export default function App() {
       return { focused: false, reason: "distractor" };
     }
 
+    if (normalizedState.includes("phone") || normalizedState.includes("book")) {
+      return { focused: false, reason: "distractor" };
+    }
+
+    if (normalizedState.includes("talking")) {
+      return { focused: false, reason: "audio" };
+    }
+
+    if (normalizedState.includes("no face")) {
+      return { focused: false, reason: "no-face" };
+    }
+
     if (typeof leftEar === "number" && leftEar < 0.3) {
       return { focused: false, reason: "eyes-closed" };
     }
 
-    if (normalizedState === "at screen") {
+    if (normalizedState === "focused" || normalizedState === "at screen") {
       return { focused: true, reason: "state" };
     }
 
@@ -230,6 +252,12 @@ export default function App() {
         nextResults.length;
       setFocusLevel(average);
       setCurrentState(average >= 0.7 ? "focused" : "distracted");
+      console.log(
+        "[LockIn AI] Focus update",
+        `level=${Math.round(average * 100)}%`,
+        `samples=${nextResults.length}`,
+        `latest=${isFocused ? "focused" : "distracted"}`
+      );
       return nextResults;
     });
   };
@@ -238,31 +266,51 @@ export default function App() {
     if (!lessonStarted) {
       setFocusResults([]);
       setFocusLevel(1);
+      setVisionStatus("idle");
       return;
     }
 
-    const interval = setInterval(() => {
-      const focusBias = Math.random();
-      const hRatio = focusBias < 0.7 ? 0.45 : 0.2 + Math.random() * 0.6;
-      const vRatio = focusBias < 0.7 ? 0.5 : 0.2 + Math.random() * 0.6;
-      const leftEar = Math.random() > 0.95 ? 0.2 : 0.35;
-      const state =
-        focusBias < 0.7 ? "at screen" : ["left", "right", "down"][
-          Math.floor(Math.random() * 3)
-        ];
-      const objects = Math.random() > 0.97 ? ["phone"] : [];
+    const socket = new WebSocket("ws://localhost:8765");
 
-      const result = evaluateFocus({
-        h_ratio: hRatio,
-        v_ratio: vRatio,
-        left_ear: leftEar,
-        state,
-        objects
-      });
-      pushFocusResult(result.focused);
-    }, 1500);
+    socket.onopen = () => {
+      console.log("[LockIn AI] Vision socket connected");
+      setVisionStatus("connected");
+    };
 
-    return () => clearInterval(interval);
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        lastPayloadRef.current = payload;
+        setVisionState(payload?.state ? String(payload.state) : "");
+        if (payload?.preview_jpeg) {
+          setVisionFrame(payload.preview_jpeg);
+        }
+        if (payload?.state === "camera-error") {
+          setCameraError("Vision backend cannot read the camera.");
+        } else {
+          setCameraError("");
+        }
+        console.log("[LockIn AI] Vision payload", payload);
+        const result = evaluateFocus(payload);
+        pushFocusResult(result.focused);
+      } catch (error) {
+        console.warn("[LockIn AI] Invalid vision payload", event.data);
+      }
+    };
+
+    socket.onerror = (event) => {
+      console.warn("[LockIn AI] Vision socket error", event);
+      setVisionStatus("error");
+    };
+
+    socket.onclose = () => {
+      console.log("[LockIn AI] Vision socket disconnected");
+      setVisionStatus("disconnected");
+    };
+
+    return () => {
+      socket.close();
+    };
   }, [lessonStarted]);
 
   const focusWarningActive = focusLevel < 0.7;
@@ -388,17 +436,28 @@ export default function App() {
             }}
           >
             <div className="camera-frame">
-            <video
-              ref={videoRef}
-              className="camera-video"
-              autoPlay
-              playsInline
-              muted
-              onLoadedMetadata={() => {
-                setCameraReady(true);
-                setCameraError("");
-              }}
-            />
+            {previewEnabled ? (
+              <video
+                ref={videoRef}
+                className="camera-video"
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={() => {
+                  setCameraReady(true);
+                  setCameraError("");
+                }}
+              />
+            ) : visionFrame ? (
+              <img
+                className="camera-video"
+                src={`data:image/jpeg;base64,${visionFrame}`}
+                alt="Vision preview"
+              />
+            ) : null}
+              {visionState && (
+                <div className="camera-state">State: {visionState}</div>
+              )}
               {(cameraError || !cameraReady) && (
                 <div className="camera-overlay">
                   <div className="camera-ring" />
@@ -431,6 +490,13 @@ export default function App() {
                   Focus level {Math.round(focusLevel * 100)}%
                 </p>
               </div>
+            </div>
+            <div>
+              <p className="footer-label">Vision</p>
+              <p className="footer-subtle">{visionStatus}</p>
+              {visionState && (
+                <p className="footer-subtle">State: {visionState}</p>
+              )}
             </div>
             <button className="ghost" type="button" onClick={endLesson}>
               End session
