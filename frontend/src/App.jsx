@@ -14,6 +14,17 @@ const sampleTimeline = [
   { label: "10:00", state: "focused" }
 ];
 
+const DEFAULT_VISION_CONFIG = {
+  hMin: 0.35,
+  hMax: 0.65,
+  vMin: 0.35,
+  vMax: 0.6,
+  earThreshold: 0.3,
+  audioThreshold: 1.5,
+  includeTalking: true,
+  includeObjects: true
+};
+
 export default function App() {
   const [lessonMinutes, setLessonMinutes] = useState("45");
   const [workMode, setWorkMode] = useState("laptop");
@@ -54,20 +65,15 @@ export default function App() {
   const [cameraPosition, setCameraPosition] = useState({ x: 24, y: 24 });
   const dragState = useRef(null);
   const endTriggeredRef = useRef(false);
-  const [visionConfig, setVisionConfig] = useState({
-    hMin: 0.35,
-    hMax: 0.65,
-    vMin: 0.35,
-    vMax: 0.6,
-    earThreshold: 0.3,
-    audioThreshold: 1.5,
-    includeTalking: true,
-    includeObjects: true
-  });
+  const [visionConfig, setVisionConfig] = useState(DEFAULT_VISION_CONFIG);
   const [characterChoice, setCharacterChoice] = useState("cop");
   const [alertQueue, setAlertQueue] = useState([]);
   const [activeAlert, setActiveAlert] = useState(null);
   const [endSessionPending, setEndSessionPending] = useState(false);
+
+  const resetToDefaults = () => {
+    setVisionConfig(DEFAULT_VISION_CONFIG);
+  };
 
   const statusText = useMemo(() => {
     if (!trackingEnabled) {
@@ -1002,15 +1008,25 @@ export default function App() {
               </button>
             </form>
             <div className="settings-block">
-              <p className="subtle">Detection settings</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <p className="subtle" style={{ margin: 0 }}>Detection settings</p>
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={resetToDefaults}
+                  style={{ fontSize: "0.8rem", padding: "4px 8px", height: "auto" }}
+                >
+                  Reset defaults
+                </button>
+              </div>
               <div className="settings-grid">
                 <label className="field">
-                  <span>Horizontal min</span>
+                  <span>Horizontal Min </span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="range"
                     min="0"
-                    max="1"
+                    max="0.5"
+                    step="0.01"
                     value={visionConfig.hMin}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
@@ -1021,12 +1037,12 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>Horizontal max</span>
+                  <span>Horizontal Max </span>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="range"
+                    min="0.5"
                     max="1"
+                    step="0.01"
                     value={visionConfig.hMax}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
@@ -1037,12 +1053,12 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>Vertical min</span>
+                  <span>Vertical Min </span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="range"
                     min="0"
-                    max="1"
+                    max="0.5"
+                    step="0.01"
                     value={visionConfig.vMin}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
@@ -1053,12 +1069,12 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>Vertical max</span>
+                  <span>Vertical Max </span>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="range"
+                    min="0.5"
                     max="1"
+                    step="0.01"
                     value={visionConfig.vMax}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
@@ -1069,12 +1085,12 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>Eye threshold</span>
+                  <span>Eye Threshold</span>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="range"
                     min="0"
                     max="1"
+                    step="0.01"
                     value={visionConfig.earThreshold}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
@@ -1085,12 +1101,12 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>Audio threshold</span>
+                  <span>Audio Threshold</span>
                   <input
-                    type="number"
-                    step="0.1"
+                    type="range"
                     min="0"
-                    max="10"
+                    max="30"
+                    step="0.1"
                     value={visionConfig.audioThreshold}
                     onChange={(event) =>
                       setVisionConfig((prev) => ({
