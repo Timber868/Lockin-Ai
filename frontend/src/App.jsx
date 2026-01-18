@@ -31,7 +31,11 @@ export default function App() {
   const [visionStatus, setVisionStatus] = useState("idle");
   const [visionState, setVisionState] = useState("");
   const [visionFrame, setVisionFrame] = useState("");
+  const [visionVolume, setVisionVolume] = useState(null);
+  const [distractorReason, setDistractorReason] = useState("");
   const lastPayloadRef = useRef(null);
+  const recentStatesRef = useRef([]);
+  const socketRef = useRef(null);
   const [cameraError, setCameraError] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef(null);
@@ -43,6 +47,16 @@ export default function App() {
   const distractedCountRef = useRef(0);
   const [cameraPosition, setCameraPosition] = useState({ x: 24, y: 24 });
   const dragState = useRef(null);
+  const [visionConfig, setVisionConfig] = useState({
+    hMin: 0.35,
+    hMax: 0.65,
+    vMin: 0.35,
+    vMax: 0.6,
+    earThreshold: 0.3,
+    audioThreshold: 1.5,
+    includeTalking: true,
+    includeObjects: true
+  });
 
   const statusText = useMemo(() => {
     if (!trackingEnabled) {
@@ -51,13 +65,68 @@ export default function App() {
     return currentState === "focused" ? "Focused" : "Distracted";
   }, [trackingEnabled, currentState]);
 
-  const statusColor = trackingEnabled
-    ? statusColors[currentState]
-    : statusColors.offline;
-
   const toggleTracking = () => {
     setTrackingEnabled((prev) => !prev);
   };
+
+  const sendVisionConfig = (config) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    socket.send(
+      JSON.stringify({
+        type: "config",
+        h_min: config.hMin,
+        h_max: config.hMax,
+        v_min: config.vMin,
+        v_max: config.vMax,
+        ear_threshold: config.earThreshold,
+        audio_threshold: config.audioThreshold,
+        include_talking: config.includeTalking,
+        include_objects: config.includeObjects
+      })
+    );
+  };
+
+  const normalizeState = (value) =>
+    String(value || "").trim().toLowerCase();
+  const isFocusedState = (value) =>
+    value === "focused" || value === "at screen";
+  const computeMostCommonDistractor = (states) => {
+    const counts = {};
+    const labels = {};
+    states.forEach((state) => {
+      const normalized = normalizeState(state);
+      if (!normalized || isFocusedState(normalized)) {
+        return;
+      }
+      counts[normalized] = (counts[normalized] || 0) + 1;
+      if (!labels[normalized]) {
+        labels[normalized] = String(state);
+      }
+    });
+
+    let bestKey = "";
+    let bestCount = 0;
+    Object.entries(counts).forEach(([key, count]) => {
+      if (count > bestCount) {
+        bestKey = key;
+        bestCount = count;
+      }
+    });
+
+    return bestKey ? labels[bestKey] : "";
+  };
+
+  const focusPercent = Math.round(focusLevel * 100);
+  const focusMeterColor =
+    focusLevel >= 0.7
+      ? "var(--success)"
+      : focusLevel >= 0.4
+      ? "var(--warning)"
+      : "#ef4444";
+  const statusColor = trackingEnabled ? focusMeterColor : statusColors.offline;
 
   const simulateState = () => {
     setCurrentState((prev) => (prev === "focused" ? "distracted" : "focused"));
@@ -214,7 +283,7 @@ export default function App() {
       return { focused: false, reason: "distractor" };
     }
 
-    if (normalizedState.includes("talking")) {
+    if (visionConfig.includeTalking && normalizedState.includes("talking")) {
       return { focused: false, reason: "audio" };
     }
 
@@ -222,7 +291,7 @@ export default function App() {
       return { focused: false, reason: "no-face" };
     }
 
-    if (typeof leftEar === "number" && leftEar < 0.3) {
+    if (typeof leftEar === "number" && leftEar < visionConfig.earThreshold) {
       return { focused: false, reason: "eyes-closed" };
     }
 
@@ -233,10 +302,10 @@ export default function App() {
     if (
       typeof hRatio === "number" &&
       typeof vRatio === "number" &&
-      hRatio >= 0.35 &&
-      hRatio <= 0.65 &&
-      vRatio >= 0.35 &&
-      vRatio <= 0.6
+      hRatio >= visionConfig.hMin &&
+      hRatio <= visionConfig.hMax &&
+      vRatio >= visionConfig.vMin &&
+      vRatio <= visionConfig.vMax
     ) {
       return { focused: true, reason: "centered" };
     }
@@ -246,7 +315,7 @@ export default function App() {
 
   const pushFocusResult = (isFocused) => {
     setFocusResults((prevResults) => {
-      const nextResults = [...prevResults, isFocused ? 1 : 0].slice(-20);
+      const nextResults = [...prevResults, isFocused ? 1 : 0].slice(-60);
       const average =
         nextResults.reduce((sum, value) => sum + value, 0) /
         nextResults.length;
@@ -269,10 +338,13 @@ export default function App() {
     }
 
     const socket = new WebSocket("ws://localhost:8765");
+    socketRef.current = socket;
 
     socket.onopen = () => {
       console.log("[LockIn AI] Vision socket connected");
       setVisionStatus("connected");
+      setCameraReady(false);
+      sendVisionConfig(visionConfig);
     };
 
     socket.onmessage = (event) => {
@@ -283,6 +355,16 @@ export default function App() {
         if (payload?.preview_jpeg) {
           setVisionFrame(payload.preview_jpeg);
           setCameraReady(true);
+        }
+        if (typeof payload?.volume === "number") {
+          setVisionVolume(payload.volume);
+        }
+        if (payload?.state) {
+          const nextStates = [...recentStatesRef.current, payload.state].slice(
+            -60
+          );
+          recentStatesRef.current = nextStates;
+          setDistractorReason(computeMostCommonDistractor(nextStates));
         }
         if (payload?.state === "camera-error") {
           setCameraError("Vision backend cannot read the camera.");
@@ -300,17 +382,28 @@ export default function App() {
     socket.onerror = (event) => {
       console.warn("[LockIn AI] Vision socket error", event);
       setVisionStatus("error");
+      setCameraError("Vision backend connection error.");
+      setCameraReady(false);
     };
 
     socket.onclose = () => {
       console.log("[LockIn AI] Vision socket disconnected");
       setVisionStatus("disconnected");
+      setVisionFrame("");
+      setVisionState("");
+      setCameraReady(false);
+      setCameraError("Vision backend disconnected.");
+      socketRef.current = null;
     };
 
     return () => {
       socket.close();
     };
   }, [trackingEnabled]);
+
+  useEffect(() => {
+    sendVisionConfig(visionConfig);
+  }, [visionConfig]);
 
   const focusWarningActive = focusLevel < 0.7;
 
@@ -325,9 +418,10 @@ export default function App() {
     if (focusWarningActive && !distractedStartRef.current) {
       distractedStartRef.current = now;
       distractedCountRef.current += 1;
+      const label = distractorReason || "distracted";
       setSessionTimeline((prev) => [
         ...prev,
-        { elapsedSeconds, state: "distracted" }
+        { elapsedSeconds, state: "distracted", label }
       ]);
     }
     if (!focusWarningActive && distractedStartRef.current) {
@@ -337,10 +431,10 @@ export default function App() {
       distractedStartRef.current = null;
       setSessionTimeline((prev) => [
         ...prev,
-        { elapsedSeconds, state: "focused" }
+        { elapsedSeconds, state: "focused", label: "focused" }
       ]);
     }
-  }, [focusWarningActive, lessonStarted]);
+  }, [focusWarningActive, lessonStarted, distractorReason]);
 
   useEffect(() => {
     if (!streamRef.current || !videoRef.current) {
@@ -419,7 +513,10 @@ export default function App() {
             </p>
           </div>
           {focusWarningActive && (
-            <div className="session-alert">YOU'RE NOT FOCUSED</div>
+            <div className="session-alert">
+              YOU'RE NOT FOCUSED
+              {distractorReason ? ` - ${distractorReason}` : ""}
+            </div>
           )}
           <div
             className="floating-camera"
@@ -465,7 +562,9 @@ export default function App() {
                     <p className="subtle">
                       {cameraError
                         ? cameraError
-                        : "Allow camera access to see the live feed."}
+                        : previewEnabled
+                        ? "Allow camera access to see the live feed."
+                        : "Waiting for vision backend preview..."}
                     </p>
                   </div>
                 </div>
@@ -486,8 +585,19 @@ export default function App() {
               <div>
                 <p className="footer-label">{statusText}</p>
                 <p className="footer-subtle">
-                  Focus level {Math.round(focusLevel * 100)}%
+                  Focus level {focusPercent}%
                 </p>
+                <div className="focus-meter">
+                  <div className="meter">
+                    <div
+                      className="meter-fill"
+                      style={{
+                        width: `${focusPercent}%`,
+                        background: focusMeterColor
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div>
@@ -496,6 +606,13 @@ export default function App() {
               {visionState && (
                 <p className="footer-subtle">State: {visionState}</p>
               )}
+              <p className="footer-subtle">
+                Talking: {visionConfig.includeTalking ? "on" : "off"}
+              </p>
+              <p className="footer-subtle">
+                Audio {visionVolume !== null ? visionVolume.toFixed(2) : "--"} /
+                {` ${visionConfig.audioThreshold}`}
+              </p>
             </div>
             <button className="ghost" type="button" onClick={endLesson}>
               End session
@@ -593,6 +710,133 @@ export default function App() {
                 Start session
               </button>
             </form>
+            <div className="settings-block">
+              <p className="subtle">Detection settings</p>
+              <div className="settings-grid">
+                <label className="field">
+                  <span>Horizontal min</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={visionConfig.hMin}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        hMin: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Horizontal max</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={visionConfig.hMax}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        hMax: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Vertical min</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={visionConfig.vMin}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        vMin: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Vertical max</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={visionConfig.vMax}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        vMax: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Eye threshold</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={visionConfig.earThreshold}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        earThreshold: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Audio threshold</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={visionConfig.audioThreshold}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        audioThreshold: Number(event.target.value)
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field checkbox-field">
+                  <span>Include talking</span>
+                  <input
+                    type="checkbox"
+                    checked={visionConfig.includeTalking}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        includeTalking: event.target.checked
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field checkbox-field">
+                  <span>Include objects</span>
+                  <input
+                    type="checkbox"
+                    checked={visionConfig.includeObjects}
+                    onChange={(event) =>
+                      setVisionConfig((prev) => ({
+                        ...prev,
+                        includeObjects: event.target.checked
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            </div>
           </section>
 
           <section className="card right-panel-card">
@@ -637,7 +881,7 @@ export default function App() {
                           className="timeline-pill"
                           style={{ backgroundColor: statusColors[entry.state] }}
                         >
-                          {entry.state}
+                          {entry.label || entry.state}
                         </span>
                       </div>
                     ))}
@@ -670,10 +914,6 @@ export default function App() {
                     <p className="subtle">Alerts</p>
                   </div>
                 </div>
-                <p className="subtle note">
-                  Replace these placeholders with real metrics from the
-                  inference pipeline.
-                </p>
               </>
             )}
           </section>
