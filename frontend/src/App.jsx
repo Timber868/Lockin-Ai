@@ -363,6 +363,7 @@ export default function App() {
     };
   }, []);
 
+  // false = use backend camera (CV works, preview from backend). true = use browser camera (you see yourself but backend cannot open camera, so no CV/reactions).
   const previewEnabled = false;
 
   useEffect(() => {
@@ -856,7 +857,7 @@ export default function App() {
               {visionState && (
                 <div className="camera-state">State: {visionState}</div>
               )}
-              {(cameraError || !cameraReady) && (
+              {(cameraError || (!visionFrame && !previewEnabled)) && (
                 <div className="camera-overlay">
                   <div className="camera-ring" />
                   <div>
@@ -866,6 +867,8 @@ export default function App() {
                         ? cameraError
                         : previewEnabled
                         ? "Allow camera access to see the live feed."
+                        : visionStatus !== "connected"
+                        ? "Start the vision server (python -m focusai.vision_server) and connect."
                         : "Waiting for vision backend preview..."}
                     </p>
                   </div>

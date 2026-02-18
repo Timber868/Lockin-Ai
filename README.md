@@ -12,24 +12,10 @@ LockIn AI uses computer vision and machine learning to detect whether a user is 
 Lockin-Ai/
 ├── focusai/                    # Main Python package
 │   ├── __init__.py            # Package initialization
-│   ├── models.py              # Shared dataclasses
-│   ├── config.py              # Configuration management
-│   ├── logging_setup.py       # Logging configuration
 │   ├── vision_server.py       # WebSocket vision server (main backend)
 │   ├── capture/               # Camera frame capture
 │   │   ├── __init__.py
-│   │   ├── focus_tracker.py   # Focus detection tracker
-│   │   └── tempMain.py        # Temporary test scripts
-│   ├── preprocess/            # Frame preprocessing
-│   │   ├── __init__.py
-│   │   ├── processor.py       # Frame preprocessing
-│   │   └── features.py        # Feature extraction
-│   ├── inference/             # Focus detection inference
-│   │   ├── __init__.py
-│   │   └── detector.py        # Focus detection model
-│   ├── ui/                    # User interface
-│   │   ├── __init__.py
-│   │   └── monitor.py         # Live monitoring UI
+│   │   └── focus_tracker.py   # Focus detection tracker
 │   └── videos/                # Character reaction videos
 │       ├── animegirl/         # Anime girl character videos
 │       ├── cop/               # Cop character videos
@@ -41,16 +27,9 @@ Lockin-Ai/
 │   ├── package.json           # Node.js dependencies
 │   └── vite.config.js         # Vite configuration
 ├── tests/                     # Test suite
-│   ├── __init__.py
-│   ├── test_capture.py
-│   ├── test_preprocess.py
-│   ├── test_inference.py
-│   ├── test_ui.py
-│   ├── test_config.py
-│   └── test_models.py
+│   └── __init__.py
 ├── docs/                      # Documentation
 │   └── architecture.md        # Architecture details
-├── main.py                    # Legacy CLI entry point
 ├── pyproject.toml             # Project metadata
 ├── requirements.txt           # Python dependencies
 ├── requirements-dev.txt       # Development dependencies
@@ -170,8 +149,8 @@ The project includes:
 - ✅ WebSocket-based vision server for real-time data streaming
 - ✅ React frontend with real-time focus visualization
 - ✅ Character-based reaction system with video playback
-- ✅ Configuration management and logging
-- ✅ Test suite framework
+- ✅ Config and logging (in vision server)
+- ✅ Tests folder (add tests as needed)
 - ✅ Complete documentation
 
 ## License

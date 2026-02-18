@@ -57,16 +57,13 @@ all = [
     "lockin-ai[dev,cv,ml,ui]",
 ]
 
-[project.scripts]
-lockin-ai = "main:main"
-
 [project.urls]
 Homepage = "https://github.com/Timber868/Lockin-Ai"
 Repository = "https://github.com/Timber868/Lockin-Ai"
 Issues = "https://github.com/Timber868/Lockin-Ai/issues"
 
 [tool.setuptools]
-packages = ["focusai", "focusai.capture", "focusai.preprocess", "focusai.inference", "focusai.ui"]
+packages = ["focusai", "focusai.capture"]
 
 [tool.black]
 line-length = 88

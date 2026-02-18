@@ -125,10 +125,14 @@ def _start_stream(queue, loop, stop_event, camera_id, config, config_lock):
                     "audio_threshold": active_config["audio_threshold"]
                 }
             }
-            if preview_interval and _frame is not None:
+            if _frame is not None:
                 now = time.time()
-                if now - last_preview_time >= preview_interval:
-                    last_preview_time = now
+                # Always include preview on first payload so the feed appears immediately; then at preview_interval.
+                if not first_payload_logged or (preview_interval and now - last_preview_time >= preview_interval):
+                    if not first_payload_logged:
+                        last_preview_time = now
+                    elif preview_interval:
+                        last_preview_time = now
                     ok, buffer = cv2.imencode(".jpg", _frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                     if ok:
                         payload["preview_jpeg"] = base64.b64encode(buffer).decode("ascii")
