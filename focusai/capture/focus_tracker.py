@@ -128,19 +128,19 @@ class FocusTracker:
                     print(f"Warning: YOLO unavailable ({exc}). Object detection disabled.")
             if self.yolo_model is not None:
                 yolo_results = self.yolo_model(frame, stream=True, verbose=False)
-            for r in yolo_results:
-                for box in r.boxes:
-                    cls_id = int(box.cls[0])
-                    conf = float(box.conf[0])
-                    
-                    if cls_id in self.distraction_classes and conf > conf_threshold:
-                        if cls_id == 67: state = "PHONE DETECTED"
-                        elif cls_id == 73: state = "BOOK DETECTED"
-                        else: state = "DISTRACTION DETECTED"
+                for r in yolo_results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        conf = float(box.conf[0])
                         
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                        label = f"{state.split(' ')[0]} ({conf:.2f})"
+                        if cls_id in self.distraction_classes and conf > conf_threshold:
+                            if cls_id == 67: state = "PHONE DETECTED"
+                            elif cls_id == 73: state = "BOOK DETECTED"
+                            else: state = "DISTRACTION DETECTED"
+                            
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            label = f"{state.split(' ')[0]} ({conf:.2f})"
 
         return state, metrics, frame
 

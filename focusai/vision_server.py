@@ -23,7 +23,21 @@ def _safe_float(value):
         return None
 
 
+# Shared state: one capture pipeline, broadcast to all clients
+_shared = {
+    "clients": set(),
+    "config": None,
+    "config_lock": None,
+    "camera_id": None,
+    "capture_thread": None,
+    "stop_event": None,
+    "broadcast_queue": None,
+    "broadcaster_task": None,
+}
+
+
 def _start_stream(queue, loop, stop_event, camera_id, config, config_lock):
+    """Single capture thread: one FocusTracker, push payloads to queue."""
     tracker = None
     try:
         try:
@@ -134,36 +148,65 @@ def _start_stream(queue, loop, stop_event, camera_id, config, config_lock):
         loop.call_soon_threadsafe(queue.put_nowait, None)
 
 
+async def _broadcaster(shared):
+    """Read from shared queue and send each payload to all connected clients."""
+    queue = shared["broadcast_queue"]
+    while True:
+        payload = await queue.get()
+        if payload is None:
+            break
+        dead = []
+        for ws in list(shared["clients"]):
+            try:
+                await ws.send(json.dumps(payload))
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            shared["clients"].discard(ws)
+
+
 async def handler(websocket):
     loop = asyncio.get_running_loop()
-    queue = asyncio.Queue()
-    stop_event = threading.Event()
-
     camera_id = int(os.getenv("LOCKIN_CAMERA_ID", "0"))
     log_every = int(os.getenv("LOCKIN_VISION_LOG_EVERY", "30"))
-    config_lock = threading.Lock()
-    config = {
-        "h_min": 0.35,
-        "h_max": 0.65,
-        "v_min": 0.35,
-        "v_max": 0.60,
-        "ear_threshold": 0.30,
-        "conf_threshold": 0.50,
-        "audio_threshold": 1.50,
-        "include_talking": True,
-        "include_objects": True
-    }
-    thread = threading.Thread(
-        target=_start_stream,
-        args=(queue, loop, stop_event, camera_id, config, config_lock),
-        daemon=True
-    )
-    thread.start()
-    client = getattr(websocket, "remote_address", None)
-    LOG.info("Vision client connected camera_id=%s client=%s", camera_id, client)
 
-    sent_count = 0
-    last_log_time = time.time()
+    # Initialize shared state once
+    if _shared["config"] is None:
+        _shared["config"] = {
+            "h_min": 0.35,
+            "h_max": 0.65,
+            "v_min": 0.35,
+            "v_max": 0.60,
+            "ear_threshold": 0.30,
+            "conf_threshold": 0.50,
+            "audio_threshold": 1.50,
+            "include_talking": True,
+            "include_objects": True
+        }
+        _shared["config_lock"] = threading.Lock()
+        _shared["camera_id"] = camera_id
+
+    config = _shared["config"]
+    config_lock = _shared["config_lock"]
+
+    # Register client
+    _shared["clients"].add(websocket)
+    client = getattr(websocket, "remote_address", None)
+    LOG.info("Vision client connected camera_id=%s client=%s (total=%s)", camera_id, client, len(_shared["clients"]))
+
+    # First client: start single capture thread and broadcaster
+    if len(_shared["clients"]) == 1:
+        _shared["stop_event"] = threading.Event()
+        _shared["broadcast_queue"] = asyncio.Queue()
+        _shared["capture_thread"] = threading.Thread(
+            target=_start_stream,
+            args=(_shared["broadcast_queue"], loop, _shared["stop_event"], _shared["camera_id"], config, config_lock),
+            daemon=True
+        )
+        _shared["capture_thread"].start()
+        _shared["broadcaster_task"] = asyncio.create_task(_broadcaster(_shared))
+
+    # Listen for config updates from this client
     async def listen_for_config():
         while True:
             try:
@@ -194,29 +237,34 @@ async def handler(websocket):
 
     listener_task = asyncio.create_task(listen_for_config())
     try:
-        while True:
-            payload = await queue.get()
-            if payload is None:
-                break
-            await websocket.send(json.dumps(payload))
-            sent_count += 1
-            if log_every > 0 and sent_count % log_every == 0:
-                now = time.time()
-                elapsed = max(now - last_log_time, 0.001)
-                rate = round(log_every / elapsed, 2)
-                last_log_time = now
-                LOG.info(
-                    "Vision payload state=%s face=%s rate=%s/s camera_id=%s",
-                    payload.get("state"),
-                    payload.get("face_detected"),
-                    rate,
-                    payload.get("camera_id")
-                )
-    except websockets.ConnectionClosed:
-        LOG.info("Vision client disconnected client=%s", client)
+        await asyncio.wait_for(websocket.wait_closed(), timeout=None)
+    except asyncio.CancelledError:
+        pass
     finally:
         listener_task.cancel()
-        stop_event.set()
+        try:
+            await listener_task
+        except asyncio.CancelledError:
+            pass
+        _shared["clients"].discard(websocket)
+        LOG.info("Vision client disconnected client=%s (remaining=%s)", client, len(_shared["clients"]))
+
+        # Last client: stop capture and broadcaster
+        if len(_shared["clients"]) == 0:
+            _shared["stop_event"].set()
+            if _shared["broadcaster_task"] is not None:
+                _shared["broadcaster_task"].cancel()
+                try:
+                    await _shared["broadcaster_task"]
+                except asyncio.CancelledError:
+                    pass
+                _shared["broadcaster_task"] = None
+            if _shared["capture_thread"] is not None:
+                _shared["capture_thread"].join(timeout=5.0)
+                _shared["capture_thread"] = None
+            _shared["broadcast_queue"] = None
+            _shared["stop_event"] = None
+            LOG.info("Vision capture stopped (no clients)")
 
 
 async def main():
