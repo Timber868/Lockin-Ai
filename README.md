@@ -26,13 +26,10 @@ Lockin-Ai/
 │   ├── public/                # Static assets
 │   ├── package.json           # Node.js dependencies
 │   └── vite.config.js         # Vite configuration
-├── tests/                     # Test suite
-│   └── __init__.py
 ├── docs/                      # Documentation
 │   └── architecture.md        # Architecture details
 ├── pyproject.toml             # Project metadata
 ├── requirements.txt           # Python dependencies
-├── requirements-dev.txt       # Development dependencies
 ├── .env.example               # Environment variables template
 ├── README.md                  # This file
 ├── LICENSE                    # MIT License
@@ -150,7 +147,6 @@ The project includes:
 - ✅ React frontend with real-time focus visualization
 - ✅ Character-based reaction system with video playback
 - ✅ Config and logging (in vision server)
-- ✅ Tests folder (add tests as needed)
 - ✅ Complete documentation
 
 ## License
